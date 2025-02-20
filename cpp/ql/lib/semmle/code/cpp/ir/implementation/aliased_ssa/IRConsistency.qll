@@ -1,6 +1,7 @@
 private import IR
 import InstructionConsistency // module is below
 import IRTypeConsistency // module is in IRType.qll
+import internal.IRConsistencyImports
 
 module InstructionConsistency {
   private import internal.InstructionImports as Imports
@@ -28,7 +29,7 @@ module InstructionConsistency {
     PresentIRFunction() { this = TPresentIRFunction(irFunc) }
 
     override string toString() {
-      result = concat(Language::getIdentityString(irFunc.getFunction()), "; ")
+      result = concat(LanguageDebug::getIdentityString(irFunc.getFunction()), "; ")
     }
 
     override Language::Location getLocation() {
@@ -544,5 +545,27 @@ module InstructionConsistency {
       "Variable address instruction '" + instr.toString() +
         "' has no associated variable, in function '$@'." and
     irFunc = getInstructionIRFunction(instr, irFuncText)
+  }
+
+  query predicate nonBooleanOperand(
+    Instruction instr, string message, OptionalIRFunction irFunc, string irFuncText
+  ) {
+    exists(Instruction unary |
+      unary = instr.(LogicalNotInstruction).getUnary() and
+      not unary.getResultIRType() instanceof IRBooleanType and
+      irFunc = getInstructionIRFunction(instr, irFuncText) and
+      message =
+        "Logical Not instruction " + instr.toString() +
+          " with non-Boolean operand, in function '$@'."
+    )
+    or
+    exists(Instruction cond |
+      cond = instr.(ConditionalBranchInstruction).getCondition() and
+      not cond.getResultIRType() instanceof IRBooleanType and
+      irFunc = getInstructionIRFunction(instr, irFuncText) and
+      message =
+        "Conditional branch instruction " + instr.toString() +
+          " with non-Boolean condition, in function '$@'."
+    )
   }
 }

@@ -13,19 +13,11 @@ module Make<RegexTreeViewSig TreeImpl> {
   private import TreeImpl
   import NfaUtils::Make<TreeImpl>
 
+  final private class FinalRegExpTerm = RegExpTerm;
+
   /** A root term */
-  class RootTerm instanceof RegExpTerm {
+  final class RootTerm extends FinalRegExpTerm {
     RootTerm() { this.isRootTerm() }
-
-    /** Gets a string representation of this term. */
-    string toString() { result = super.toString() }
-
-    /** Holds if this term has the specified location. */
-    predicate hasLocationInfo(
-      string filepath, int startline, int startcolumn, int endline, int endcolumn
-    ) {
-      super.hasLocationInfo(filepath, startline, startcolumn, endline, endcolumn)
-    }
   }
 
   /**
@@ -115,7 +107,7 @@ module Make<RegexTreeViewSig TreeImpl> {
     // The `getAnInputSymbolMatching` relation specialized to the chars that exists in strings tested by a `MatchedRegExp`.
     pragma[noinline]
     private InputSymbol specializedGetAnInputSymbolMatching(string char) {
-      exists(string s, RootTerm r | isCandidate(r, s, _, _) | char = s.charAt(_)) and
+      exists(string s | isCandidate(_, s, _, _) | char = s.charAt(_)) and
       result = getAnInputSymbolMatching(char)
     }
 

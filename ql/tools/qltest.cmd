@@ -8,6 +8,19 @@ type NUL && "%CODEQL_DIST%\codeql.exe" database index-files ^
     --include-extension=.yml ^
     --size-limit=5m ^
     --language=ql ^
+    --working-dir=. ^
+    "%CODEQL_EXTRACTOR_QL_WIP_DATABASE%"
+
+IF %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
+
+type NUL && "%CODEQL_DIST%\codeql.exe" database index-files ^
+    --prune=**/*.testproj ^
+    --include-extension=.yml ^
+    --include-extension=.qlref ^
+    --size-limit=5m ^
+    --language=yaml ^
+    --working-dir=. ^
     "%CODEQL_EXTRACTOR_QL_WIP_DATABASE%"
 
 exit /b %ERRORLEVEL%
+

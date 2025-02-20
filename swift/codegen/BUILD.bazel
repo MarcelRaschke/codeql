@@ -1,16 +1,15 @@
-load("@swift_codegen_deps//:requirements.bzl", "requirement")
+load("@bazel_skylib//rules:native_binary.bzl", "native_binary")
 
-py_binary(
+native_binary(
     name = "codegen",
-    srcs = ["codegen.py"],
+    src = "//misc/codegen",
+    out = "codegen",
+    args = [
+        "--configuration-file=$(location //swift:codegen_conf)",
+    ],
     data = [
+        "//swift:codegen_conf",
         "//swift:schema",
-        "//swift:schema_includes",
-        "//swift/codegen/templates:cpp",
-        "//swift/codegen/templates:trap",
     ],
     visibility = ["//swift:__subpackages__"],
-    deps = [
-        "//swift/codegen/generators",
-    ],
 )

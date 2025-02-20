@@ -195,8 +195,8 @@ abstract class RegExp extends Ast::StringlikeLiteral {
 
   /**
    * Holds if the character set starting at `charset_start` contains a character range
-   * with lower bound found between `start` and `lower_end`
-   * and upper bound found between `upper_start` and `end`.
+   * with lower bound found between `start` and `lowerEnd`
+   * and upper bound found between `upperStart` and `end`.
    */
   predicate charRange(int charsetStart, int start, int lowerEnd, int upperStart, int end) {
     exists(int index |
@@ -844,11 +844,11 @@ abstract class RegExp extends Ast::StringlikeLiteral {
   }
 
   /**
-   * Holds if a qualified part is found between `start` and `part_end` and the qualifier is
-   * found between `part_end` and `end`.
+   * Holds if a qualified part is found between `start` and `partEnd` and the qualifier is
+   * found between `partEnd` and `end`.
    *
-   * `maybe_empty` is true if the part is optional.
-   * `may_repeat_forever` is true if the part may be repeated unboundedly.
+   * `maybeEmpty` is true if the part is optional.
+   * `mayRepeatForever` is true if the part may be repeated unboundedly.
    */
   predicate qualifiedPart(
     int start, int partEnd, int end, boolean maybeEmpty, boolean mayRepeatForever
@@ -993,10 +993,8 @@ abstract class RegExp extends Ast::StringlikeLiteral {
       this.specialCharacter(end, y, ["$", "\\Z", "\\z"])
     )
     or
-    exists(int x |
-      this.lastPart(x, end) and
-      this.item(start, end)
-    )
+    this.lastPart(_, end) and
+    this.item(start, end)
     or
     exists(int y | this.lastPart(start, y) | this.qualifiedPart(start, end, y, _, _))
     or

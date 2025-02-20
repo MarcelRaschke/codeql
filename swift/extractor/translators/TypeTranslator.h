@@ -6,6 +6,8 @@
 namespace codeql {
 class TypeTranslator : public TypeTranslatorBase<TypeTranslator> {
  public:
+  static constexpr std::string_view name = "type";
+
   using TypeTranslatorBase<TypeTranslator>::TypeTranslatorBase;
   using TypeTranslatorBase<TypeTranslator>::translateAndEmit;
 
@@ -75,6 +77,12 @@ class TypeTranslator : public TypeTranslatorBase<TypeTranslator> {
   codeql::UnresolvedType translateUnresolvedType(const swift::UnresolvedType& type);
   codeql::ParameterizedProtocolType translateParameterizedProtocolType(
       const swift::ParameterizedProtocolType& type);
+  codeql::PackArchetypeType translatePackArchetypeType(const swift::PackArchetypeType& type);
+  codeql::ElementArchetypeType translateElementArchetypeType(
+      const swift::ElementArchetypeType& type);
+  codeql::PackType translatePackType(const swift::PackType& type);
+  codeql::PackElementType translatePackElementType(const swift::PackElementType& type);
+  codeql::PackExpansionType translatePackExpansionType(const swift::PackExpansionType& type);
 
  private:
   void fillType(const swift::TypeBase& type, codeql::Type& entry);
@@ -87,9 +95,9 @@ class TypeTranslator : public TypeTranslatorBase<TypeTranslator> {
   void fillBoundGenericType(const swift::BoundGenericType& type, codeql::BoundGenericType& entry);
   void fillAnyGenericType(const swift::AnyGenericType& type, codeql::AnyGenericType& entry);
 
-  template <typename T, typename... Args>
-  auto createTypeEntry(const T& type, const Args&... args) {
-    auto entry = dispatcher.createEntry(type, args...);
+  template <typename T>
+  auto createTypeEntry(const T& type) {
+    auto entry = dispatcher.createEntry(type);
     fillType(type, entry);
     return entry;
   }

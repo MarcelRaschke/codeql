@@ -162,6 +162,108 @@ module StringOps {
     }
   }
 
+  /**
+   * An expression that is equivalent to `strings.ReplaceAll(s, old, new)`.
+   *
+   * Extend this class to refine existing API models. If you want to model new APIs,
+   * extend `StringOps::ReplaceAll::Range` instead.
+   */
+  class ReplaceAll extends DataFlow::Node instanceof ReplaceAll::Range {
+    /**
+     * Gets the `old` in `strings.ReplaceAll(s, old, new)`.
+     */
+    string getReplacedString() { result = super.getReplacedString() }
+  }
+
+  /** Provides predicates and classes for working with prefix checks. */
+  module ReplaceAll {
+    /**
+     * An expression that is equivalent to `strings.ReplaceAll(s, old, new)`.
+     *
+     * Extend this class to model new APIs. If you want to refine existing API models, extend
+     * `StringOps::ReplaceAll` instead.
+     */
+    abstract class Range extends DataFlow::Node {
+      /**
+       * Gets the `old` in `strings.ReplaceAll(s, old, new)`.
+       */
+      abstract string getReplacedString();
+    }
+
+    /**
+     * A call to `strings.ReplaceAll`  or `strings.Replace` with a negative `n`
+     * so that all instances are replaced.
+     */
+    private class StringsReplaceAll extends Range, DataFlow::CallNode {
+      StringsReplaceAll() {
+        exists(string name | this.getTarget().hasQualifiedName("strings", name) |
+          name = "ReplaceAll"
+          or
+          name = "Replace" and
+          this.getArgument(3).getNumericValue() < 0
+        )
+      }
+
+      override string getReplacedString() { result = this.getArgument(1).getStringValue() }
+    }
+
+    /**
+     * A call to `strings.NewReplacer`.
+     */
+    private class StringsNewReplacerCall extends DataFlow::CallNode {
+      StringsNewReplacerCall() { this.getTarget().hasQualifiedName("strings", "NewReplacer") }
+
+      /**
+       * Gets an argument to this call corresponding to a string that will be
+       * replaced.
+       */
+      DataFlow::Node getAReplacedArgument() {
+        exists(int n | n % 2 = 0 and result = this.getSyntacticArgument(n))
+      }
+    }
+
+    private module StringsNewReplacerConfig implements DataFlow::ConfigSig {
+      predicate isSource(DataFlow::Node source) { source instanceof StringsNewReplacerCall }
+
+      predicate isSink(DataFlow::Node sink) {
+        exists(DataFlow::MethodCallNode call |
+          sink = call.getReceiver() and
+          call.getTarget().hasQualifiedName("strings", "Replacer", ["Replace", "WriteString"])
+        )
+      }
+    }
+
+    /**
+     * Tracks data flow from a call to `strings.NewReplacer` to the receiver of
+     * a call to `strings.Replacer.Replace` or `strings.Replacer.WriteString`.
+     */
+    private module StringsNewReplacerFlow = DataFlow::Global<StringsNewReplacerConfig>;
+
+    /**
+     * A call to `strings.Replacer.Replace` or `strings.Replacer.WriteString`.
+     */
+    private class StringsReplacerReplaceOrWriteString extends Range {
+      string replacedString;
+
+      StringsReplacerReplaceOrWriteString() {
+        exists(StringsNewReplacerCall source, DataFlow::Node sink, DataFlow::MethodCallNode call |
+          StringsNewReplacerFlow::flow(source, sink) and
+          sink = call.getReceiver() and
+          replacedString = source.getAReplacedArgument().getStringValue() and
+          (
+            call.getTarget().hasQualifiedName("strings", "Replacer", "Replace") and
+            this = call.getResult()
+            or
+            call.getTarget().hasQualifiedName("strings", "Replacer", "WriteString") and
+            this = call.getArgument(1)
+          )
+        )
+      }
+
+      override string getReplacedString() { result = replacedString }
+    }
+  }
+
   /** Provides predicates and classes for working with Printf-style formatters. */
   module Formatting {
     /**
@@ -194,11 +296,6 @@ module StringOps {
        * Gets the parameter index of the format string.
        */
       abstract int getFormatStringIndex();
-
-      /**
-       * Gets the parameter index of the first parameter to be formatted.
-       */
-      abstract int getFirstFormattedParameterIndex();
     }
 
     /**
@@ -226,7 +323,7 @@ module StringOps {
         formatDirective = this.getComponent(n) and
         formatDirective.charAt(0) = "%" and
         formatDirective.charAt(1) != "%" and
-        result = this.getArgument((n / 2) + f.getFirstFormattedParameterIndex())
+        result = this.getImplicitVarargsArgument(n / 2)
       }
     }
   }
@@ -471,7 +568,7 @@ module StringOps {
   }
 
   /**
-   * One of the operands in a string concatenation.
+   * An operand in a string concatenation.
    *
    * See `ConcatenationElement` for more information.
    */

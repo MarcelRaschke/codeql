@@ -40,10 +40,10 @@ int main(int argc, char **argv) {
 	int tainted = atoi(argv[1]);
 
 	MyStruct *arr1 = (MyStruct *)malloc(sizeof(MyStruct)); // GOOD
-	MyStruct *arr2 = (MyStruct *)malloc(tainted); // DUBIOUS (not multiplied by anything)
+	MyStruct *arr2 = (MyStruct *)malloc(tainted); // BAD
 	MyStruct *arr3 = (MyStruct *)malloc(tainted * sizeof(MyStruct)); // BAD
 	MyStruct *arr4 = (MyStruct *)malloc(getTainted() * sizeof(MyStruct)); // BAD [NOT DETECTED]
-	MyStruct *arr5 = (MyStruct *)malloc(sizeof(MyStruct) + tainted); // DUBIOUS (not multiplied by anything)
+	MyStruct *arr5 = (MyStruct *)malloc(sizeof(MyStruct) + tainted); // BAD
 
 	int size = tainted * 8;
 	char *chars1 = (char *)malloc(size); // BAD
@@ -182,6 +182,36 @@ void more_bounded_tests() {
 
 	{
 		int size = atoi(getenv("USER"));
+		int size2 = size % 100;
+		malloc(size2 * sizeof(int)); // GOOD
+	}
+
+	{
+		int size = atoi(getenv("USER"));
+
+		if (size % 100)
+		{
+			malloc(size * sizeof(int)); // BAD
+		}
+	}
+
+	{
+		int size = atoi(getenv("USER"));
+		int size2 = size & 7; // Pick the first three bits of size
+		malloc(size2 * sizeof(int)); // GOOD
+	}
+
+	{
+		int size = atoi(getenv("USER"));
+
+		if (size & 7)
+		{
+			malloc(size * sizeof(int)); // BAD
+		}
+	}
+
+	{
+		int size = atoi(getenv("USER"));
 
 		malloc(size * sizeof(int)); // BAD [NOT DETECTED]
 
@@ -222,7 +252,7 @@ size_t get_bounded_size()
 }
 
 void *my_alloc(size_t s) {
-	void *ptr = malloc(s); // [UNHELPFUL RESULT]
+	void *ptr = malloc(s);
 
 	return ptr;
 }
@@ -242,7 +272,7 @@ void more_cases() {
 	malloc(get_bounded_size()); // GOOD
 
 	my_alloc(100); // GOOD
-	my_alloc(local_size); // BAD [NOT DETECTED IN CORRECT LOCATION]
+	my_alloc(local_size); // BAD
 	my_func(100); // GOOD
 	my_func(local_size); // GOOD
 }
@@ -341,4 +371,17 @@ void equality_barrier() {
 	if (size1 == size2) {
 		int* a = (int*)malloc(size1 * sizeof(int)); // GOOD
 	}
+}
+
+// --- custom allocators ---
+ 
+void *MyMalloc1(size_t size) { return malloc(size); }
+void *MyMalloc2(size_t size);
+
+void customAllocatorTests()
+{
+	int size = atoi(getenv("USER"));
+
+	char *chars1 = (char *)MyMalloc1(size); // BAD
+	char *chars2 = (char *)MyMalloc2(size); // BAD
 }

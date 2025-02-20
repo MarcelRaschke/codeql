@@ -7,7 +7,7 @@ import Type
 
 /**
  * An Exception represents an element listed in the `throws` clause
- * of a method of constructor.
+ * of a method or constructor.
  *
  * For example, `E` is an exception thrown by method `m` in
  * `void m() throws E;`, whereas `T` is an exception _type_ in
@@ -26,7 +26,7 @@ class Exception extends Element, @exception {
   /** Holds if this exception has the specified `name`. */
   override predicate hasName(string name) { this.getType().hasName(name) }
 
-  override string toString() { result = this.getType().toString() }
+  override string toString() { result = pragma[only_bind_out](this.getType()).toString() }
 
   override string getAPrimaryQlClass() { result = "Exception" }
 }

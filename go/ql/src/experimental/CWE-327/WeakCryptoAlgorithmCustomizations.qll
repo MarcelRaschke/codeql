@@ -48,19 +48,17 @@ module WeakCryptoAlgorithm {
     }
   }
 
-  /**
-   * A configuration depicting taint flow from sensitive information to weak cryptographic algorithms.
-   */
-  class Configuration extends TaintTracking::Configuration {
-    Configuration() { this = "WeakCryptoAlgorithm" }
+  private module Config implements DataFlow::ConfigSig {
+    predicate isSource(DataFlow::Node source) { source instanceof Source }
 
-    override predicate isSource(DataFlow::Node source) { source instanceof Source }
+    predicate isSink(DataFlow::Node sink) { sink instanceof Sink }
 
-    override predicate isSink(DataFlow::Node sink) { sink instanceof Sink }
-
-    override predicate isSanitizer(DataFlow::Node node) {
-      super.isSanitizer(node) or
-      node instanceof Sanitizer
-    }
+    predicate isBarrier(DataFlow::Node node) { node instanceof Sanitizer }
   }
+
+  /**
+   * Tracks taint flow from sensitive information to weak cryptographic
+   * algorithms.
+   */
+  module Flow = TaintTracking::Global<Config>;
 }

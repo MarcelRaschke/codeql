@@ -226,7 +226,8 @@ module NextJS {
    * and we therefore model the routehandler as an Express.js routehandler.
    */
   class NextApiRouteHandler extends DataFlow::FunctionNode, Express::RouteHandler,
-    Http::Servers::StandardRouteHandler {
+    Http::Servers::StandardRouteHandler
+  {
     NextApiRouteHandler() {
       exists(Module mod | mod.getFile().getParentContainer() = apiFolder() |
         this = mod.getAnExportedValue("default").getAFunctionValue()
@@ -240,14 +241,11 @@ module NextJS {
     }
   }
 
-  /** DEPRECATED: Alias for NextApiRouteHandler */
-  deprecated class NextAPIRouteHandler = NextApiRouteHandler;
-
   /**
    * Gets a reference to a [Next.js router](https://nextjs.org/docs/api-reference/next/router).
    */
   DataFlow::SourceNode nextRouter() {
-    result = DataFlow::moduleMember("next/router", "useRouter").getACall()
+    result = API::moduleImport("next/router").getMember("useRouter").getACall()
     or
     result =
       API::moduleImport("next/router")
@@ -256,5 +254,21 @@ module NextJS {
           .getParameter(0)
           .getMember("router")
           .asSource()
+  }
+
+  /**
+   * Provides classes and predicates modeling the `next-auth` library.
+   */
+  private module NextAuth {
+    /**
+     * A random string used to hash tokens, sign cookies and generate cryptographic keys as a `CredentialsNode`.
+     */
+    private class SecretKey extends CredentialsNode {
+      SecretKey() {
+        this = API::moduleImport("next-auth").getParameter(0).getMember("secret").asSink()
+      }
+
+      override string getCredentialsKind() { result = "jwt key" }
+    }
   }
 }

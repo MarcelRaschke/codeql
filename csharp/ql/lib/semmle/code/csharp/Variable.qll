@@ -7,18 +7,18 @@ import Assignable
 import Callable
 import Element
 import Type
-private import dotnet
 private import semmle.code.csharp.ExprOrStmtParent
 private import TypeRef
 
 /**
  * A variable. Either a variable with local scope (`LocalScopeVariable`) or a field (`Field`).
  */
-class Variable extends Assignable, DotNet::Variable, @variable {
+class Variable extends Assignable, @variable {
   override Variable getUnboundDeclaration() { result = this }
 
   override VariableAccess getAnAccess() { result.getTarget() = this }
 
+  /** Gets the type of this variable. */
   override Type getType() { none() }
 
   /** Gets the expression used to initialise this variable, if any. */
@@ -71,7 +71,10 @@ class LocalScopeVariable extends Variable, @local_scope_variable {
    */
   predicate isRef() { none() }
 
-  override predicate hasQualifiedName(string qualifier, string name) { none() }
+  /**
+   * Holds if this local variable or parameter is `scoped`.
+   */
+  predicate isScoped() { scoped_annotation(this, _) }
 }
 
 /**
@@ -84,8 +87,10 @@ class LocalScopeVariable extends Variable, @local_scope_variable {
  * }
  * ```
  */
-class Parameter extends DotNet::Parameter, LocalScopeVariable, Attributable, TopLevelExprParent,
-  @parameter {
+class Parameter extends LocalScopeVariable, Attributable, TopLevelExprParent, @parameter {
+  /** Gets the raw position of this parameter, including the `this` parameter at index 0. */
+  final int getRawPosition() { this = this.getDeclaringElement().getRawParameter(result) }
+
   /**
    * Gets the position of this parameter. For example, the position of `x` is
    * 0 and the position of `y` is 1 in
@@ -96,7 +101,7 @@ class Parameter extends DotNet::Parameter, LocalScopeVariable, Attributable, Top
    * }
    * ```
    */
-  override int getPosition() { params(this, _, _, result, _, _, _) }
+  int getPosition() { params(this, _, _, result, _, _, _) }
 
   override int getIndex() { result = this.getPosition() }
 
@@ -134,7 +139,7 @@ class Parameter extends DotNet::Parameter, LocalScopeVariable, Attributable, Top
    * }
    * ```
    */
-  override predicate isOut() { params(this, _, _, _, 2, _, _) }
+  predicate isOut() { params(this, _, _, _, 2, _, _) }
 
   /**
    * Holds if this parameter is a value type that is passed in by reference.
@@ -152,7 +157,7 @@ class Parameter extends DotNet::Parameter, LocalScopeVariable, Attributable, Top
   predicate isOutOrRef() { this.isOut() or this.isRef() }
 
   /**
-   * Holds if this parameter is a parameter array. For example, `args`
+   * Holds if this parameter is a parameter collection. For example, `args`
    * is a parameter array in
    *
    * ```csharp
@@ -162,6 +167,18 @@ class Parameter extends DotNet::Parameter, LocalScopeVariable, Attributable, Top
    * ```
    */
   predicate isParams() { params(this, _, _, _, 3, _, _) }
+
+  /**
+   * Holds if this parameter if a ref readonly parameter.
+   * For example, `p` is a ref readonly parameter in
+   *
+   * ```csharp
+   * void M(ref readonly int p) {
+   *   ...
+   * }
+   * ```
+   */
+  predicate isReadonlyRef() { params(this, _, _, _, 6, _, _) }
 
   /**
    * Holds this parameter is the first parameter of an extension method.
@@ -177,7 +194,7 @@ class Parameter extends DotNet::Parameter, LocalScopeVariable, Attributable, Top
   predicate hasExtensionMethodModifier() { params(this, _, _, _, 4, _, _) }
 
   /** Gets the declaring element of this parameter. */
-  override Parameterizable getDeclaringElement() { params(this, _, _, _, _, result, _) }
+  Parameterizable getDeclaringElement() { params(this, _, _, _, _, result, _) }
 
   override Parameter getUnboundDeclaration() { params(this, _, _, _, _, _, result) }
 
@@ -189,7 +206,12 @@ class Parameter extends DotNet::Parameter, LocalScopeVariable, Attributable, Top
 
   override string getName() { params(this, result, _, _, _, _, _) }
 
-  override Type getType() { params(this, _, getTypeRef(result), _, _, _, _) }
+  override Type getType() {
+    params(this, _, result, _, _, _, _)
+    or
+    not params(this, _, any(Type t), _, _, _, _) and
+    params(this, _, getTypeRef(result), _, _, _, _)
+  }
 
   override Location getALocation() { param_location(this, result) }
 
@@ -335,7 +357,12 @@ class LocalVariable extends LocalScopeVariable, @local_variable {
 
   override string getName() { localvars(this, _, result, _, _, _) }
 
-  override Type getType() { localvars(this, _, _, _, getTypeRef(result), _) }
+  override Type getType() {
+    localvars(this, _, _, _, result, _)
+    or
+    not localvars(this, _, _, _, any(Type t), _) and
+    localvars(this, _, _, _, getTypeRef(result), _)
+  }
 
   override Location getALocation() { localvar_location(this, result) }
 
@@ -370,8 +397,7 @@ class LocalConstant extends LocalVariable, @local_constant {
  * }
  * ```
  */
-class Field extends Variable, AssignableMember, Attributable, TopLevelExprParent, DotNet::Field,
-  @field {
+class Field extends Variable, AssignableMember, Attributable, TopLevelExprParent, @field {
   /**
    * Gets the initial value of this field, if any. For example, the initial
    * value of `F` on line 2 is `20` in
@@ -382,7 +408,7 @@ class Field extends Variable, AssignableMember, Attributable, TopLevelExprParent
    * }
    * ```
    */
-  override Expr getInitializer() { result = this.getChildExpr(0).getChildExpr(0) }
+  final override Expr getInitializer() { result = this.getChildExpr(0).getChildExpr(0) }
 
   /**
    * Holds if this field has an initial value. For example, the initial
@@ -399,6 +425,12 @@ class Field extends Variable, AssignableMember, Attributable, TopLevelExprParent
   /** Holds if this field is `volatile`. */
   predicate isVolatile() { this.hasModifier("volatile") }
 
+  /** Holds if this is a `ref` field. */
+  predicate isRef() { this.getAnnotatedType().isRef() }
+
+  /** Holds if this is a `ref readonly` field. */
+  predicate isReadonlyRef() { this.getAnnotatedType().isReadonlyRef() }
+
   /** Holds if this field is `readonly`. */
   predicate isReadOnly() { this.hasModifier("readonly") }
 
@@ -410,7 +442,12 @@ class Field extends Variable, AssignableMember, Attributable, TopLevelExprParent
 
   override string getName() { fields(this, _, result, _, _, _) }
 
-  override Type getType() { fields(this, _, _, _, getTypeRef(result), _) }
+  override Type getType() {
+    fields(this, _, _, _, result, _)
+    or
+    not fields(this, _, _, _, any(Type t), _) and
+    fields(this, _, _, _, getTypeRef(result), _)
+  }
 
   override Location getALocation() { field_location(this, result) }
 
@@ -478,6 +515,4 @@ class EnumConstant extends MemberConstant {
    * ```
    */
   predicate hasExplicitValue() { exists(this.getInitializer()) }
-
-  override Expr getInitializer() { result = this.getChildExpr(0) }
 }

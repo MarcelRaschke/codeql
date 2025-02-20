@@ -26,39 +26,6 @@ module ActiveStorage {
     }
   }
 
-  /** Taint related to `ActiveStorage::Filename`. */
-  private class FilenameSummaries extends ModelInput::SummaryModelCsv {
-    override predicate row(string row) {
-      row =
-        [
-          "ActiveStorage::Filename!;Method[new];Argument[0];ReturnValue;taint",
-          "ActiveStorage::Filename;Method[sanitized];Argument[self];ReturnValue;taint",
-        ]
-    }
-  }
-
-  /**
-   * `Blob` is an instance of `ActiveStorage::Blob`.
-   */
-  private class BlobTypeSummary extends ModelInput::TypeModelCsv {
-    override predicate row(string row) {
-      // package1;type1;package2;type2;path
-      row =
-        [
-          // ActiveStorage::Blob.create_and_upload! : Blob
-          "ActiveStorage::Blob;ActiveStorage::Blob!;Method[create_and_upload!].ReturnValue",
-          // ActiveStorage::Blob.create_before_direct_upload! : Blob
-          "ActiveStorage::Blob;ActiveStorage::Blob!;Method[create_before_direct_upload!].ReturnValue",
-          // ActiveStorage::Blob.compose(blobs : [Blob]) : Blob
-          "ActiveStorage::Blob;ActiveStorage::Blob!;Method[compose].ReturnValue",
-          // gives error: Invalid name 'Element' in access path
-          // "ActiveStorage::Blob;ActiveStorage::Blob!;Method[compose].Argument[0].Element[any]",
-          // ActiveStorage::Blob.find_signed(!) : Blob
-          "ActiveStorage::Blob;ActiveStorage::Blob!;Method[find_signed,find_signed!].ReturnValue",
-        ]
-    }
-  }
-
   private class BlobInstance extends DataFlow::Node {
     BlobInstance() {
       this = ModelOutput::getATypeNode("ActiveStorage::Blob").getAValueReachableFromSource()
@@ -85,7 +52,6 @@ module ActiveStorage {
           // Class methods
           API::getTopLevelMember("ActiveStorage")
               .getMember("Blob")
-              .getASubclass()
               .getAMethodCall(["create_after_unfurling!", "create_and_upload!"]),
           // Instance methods
           any(BlobInstance i, DataFlow::CallNode c |
@@ -166,7 +132,8 @@ module ActiveStorage {
    * A call on an ActiveStorage object that results in an image transformation.
    * Arguments to these calls may be executed as system commands.
    */
-  private class ImageProcessingCall extends SystemCommandExecution::Range instanceof DataFlow::CallNode {
+  private class ImageProcessingCall extends SystemCommandExecution::Range instanceof DataFlow::CallNode
+  {
     ImageProcessingCall() {
       this.getReceiver() instanceof BlobInstance and
       this.getMethodName() = ["variant", "preview", "representation"]

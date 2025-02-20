@@ -6,6 +6,7 @@
  * @precision medium
  * @id java/password-in-configuration
  * @tags security
+ *       experimental
  *       external/cwe/cwe-555
  *       external/cwe/cwe-256
  *       external/cwe/cwe-260
@@ -32,20 +33,22 @@ predicate hasEmbeddedPassword(string value) {
   )
 }
 
-from XmlAttribute nameAttr
-where
-  nameAttr.getName().toLowerCase() in ["password", "pwd"] and
-  not isNotPassword(nameAttr.getValue().trim()) // Attribute name "password" or "pwd"
-  or
-  exists(
-    XmlAttribute valueAttr // name/value pair like <property name="password" value="mysecret"/>
-  |
-    valueAttr.getElement() = nameAttr.getElement() and
-    nameAttr.getName().toLowerCase() = "name" and
-    nameAttr.getValue().toLowerCase() in ["password", "pwd"] and
-    valueAttr.getName().toLowerCase() = "value" and
-    not isNotPassword(valueAttr.getValue().trim())
-  )
-  or
-  hasEmbeddedPassword(nameAttr.getValue().trim()) // Attribute value matches password pattern
-select nameAttr, "Avoid plaintext passwords in configuration files."
+deprecated query predicate problems(XmlAttribute nameAttr, string message) {
+  (
+    nameAttr.getName().toLowerCase() in ["password", "pwd"] and
+    not isNotPassword(nameAttr.getValue().trim()) // Attribute name "password" or "pwd"
+    or
+    exists(
+      XmlAttribute valueAttr // name/value pair like <property name="password" value="mysecret"/>
+    |
+      valueAttr.getElement() = nameAttr.getElement() and
+      nameAttr.getName().toLowerCase() = "name" and
+      nameAttr.getValue().toLowerCase() in ["password", "pwd"] and
+      valueAttr.getName().toLowerCase() = "value" and
+      not isNotPassword(valueAttr.getValue().trim())
+    )
+    or
+    hasEmbeddedPassword(nameAttr.getValue().trim()) // Attribute value matches password pattern
+  ) and
+  message = "Avoid plaintext passwords in configuration files."
+}

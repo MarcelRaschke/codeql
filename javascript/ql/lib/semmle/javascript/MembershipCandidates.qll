@@ -147,7 +147,9 @@ module MembershipCandidate {
         child instanceof RegExpConstant or
         child instanceof RegExpAlt or
         child instanceof RegExpGroup
-      )
+      ) and
+      // exclude "length matches" that match every string
+      not this.getAChild*() instanceof RegExpDot
     }
 
     /**
@@ -191,7 +193,7 @@ module MembershipCandidate {
         or
         // u.match(/re/) or u.match("re")
         base = this and
-        m = "match" and
+        m = ["match", "matchAll"] and
         enumeration = RegExp::getRegExpFromNode(firstArg)
       )
     }
@@ -218,7 +220,8 @@ module MembershipCandidate {
    * A candidate that may be a property name of an object.
    */
   class ObjectPropertyNameMembershipCandidate extends MembershipCandidate::Range,
-    DataFlow::ValueNode {
+    DataFlow::ValueNode
+  {
     Expr test;
     Expr membersNode;
 

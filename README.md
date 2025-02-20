@@ -4,11 +4,13 @@ This open source repository contains the standard CodeQL libraries and queries t
 
 ## How do I learn CodeQL and run queries?
 
-There is [extensive documentation](https://codeql.github.com/docs/) on getting started with writing CodeQL using the [CodeQL extension for Visual Studio Code](https://codeql.github.com/docs/codeql-for-visual-studio-code/) and the [CodeQL CLI](https://codeql.github.com/docs/codeql-cli/).
+There is extensive documentation about the [CodeQL language](https://codeql.github.com/docs/), writing CodeQL using the [CodeQL extension for Visual Studio Code](https://docs.github.com/en/code-security/codeql-for-vs-code/) and using the [CodeQL CLI](https://docs.github.com/en/code-security/codeql-cli).
 
 ## Contributing
 
 We welcome contributions to our standard library and standard checks. Do you have an idea for a new check, or how to improve an existing query? Then please go ahead and open a pull request! Before you do, though, please take the time to read our [contributing guidelines](CONTRIBUTING.md). You can also consult our [style guides](https://github.com/github/codeql/tree/main/docs) to learn how to format your code for consistency and clarity, how to write query metadata, and how to write query help documentation for your query.
+
+For information on contributing to CodeQL documentation, see the "[contributing guide](docs/codeql/CONTRIBUTING.md)" for docs.
 
 ## License
 

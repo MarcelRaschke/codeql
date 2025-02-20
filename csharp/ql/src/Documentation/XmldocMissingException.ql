@@ -17,16 +17,16 @@ where
   declarationHasXmlComment(m) and
   m = throw.getEnclosingCallable() and
   throwType = throw.getExpr().getType() and
-  not exists(ExceptionXmlComment comment, int offset, string exceptionName, RefType throwBaseType |
+  not exists(ExceptionXmlComment comment, string exceptionName, RefType throwBaseType |
     comment = getADeclarationXmlComment(m) and
-    exceptionName = comment.getCref(offset) and
+    exceptionName = comment.getCref(_) and
     throwType.getABaseType*() = throwBaseType and
     (
       throwBaseType.hasName(exceptionName)
       or
       exists(string qualifier, string type |
         splitQualifiedName(exceptionName, qualifier, type) and
-        throwBaseType.hasQualifiedName(qualifier, type)
+        throwBaseType.hasFullyQualifiedName(qualifier, type)
       )
       // and comment.hasBody(offset) // Too slow
     )

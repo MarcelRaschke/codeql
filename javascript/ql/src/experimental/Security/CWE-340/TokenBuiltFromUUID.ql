@@ -8,12 +8,12 @@
  * @security-severity 5
  * @id js/predictable-token
  * @tags security
+ *       experimental
  *       external/cwe/cwe-340
  */
 
 import javascript
 import DataFlow
-import DataFlow::PathGraph
 
 class PredictableResultSource extends DataFlow::Node {
   PredictableResultSource() {
@@ -37,14 +37,18 @@ class TokenAssignmentValueSink extends DataFlow::Node {
   }
 }
 
-class TokenBuiltFromUuidConfig extends TaintTracking::Configuration {
-  TokenBuiltFromUuidConfig() { this = "TokenBuiltFromUuidConfig" }
+module TokenBuiltFromUuidConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node source) { source instanceof PredictableResultSource }
 
-  override predicate isSource(DataFlow::Node source) { source instanceof PredictableResultSource }
+  predicate isSink(DataFlow::Node sink) { sink instanceof TokenAssignmentValueSink }
 
-  override predicate isSink(DataFlow::Node sink) { sink instanceof TokenAssignmentValueSink }
+  predicate observeDiffInformedIncrementalMode() { any() }
 }
 
-from DataFlow::PathNode source, DataFlow::PathNode sink, TokenBuiltFromUuidConfig config
-where config.hasFlowPath(source, sink)
+module TokenBuiltFromUuidFlow = TaintTracking::Global<TokenBuiltFromUuidConfig>;
+
+import TokenBuiltFromUuidFlow::PathGraph
+
+from TokenBuiltFromUuidFlow::PathNode source, TokenBuiltFromUuidFlow::PathNode sink
+where TokenBuiltFromUuidFlow::flowPath(source, sink)
 select sink.getNode(), source, sink, "Token built from $@.", source.getNode(), "predictable value"

@@ -3,15 +3,29 @@ private import semmle.code.cpp.ir.dataflow.DataFlow
 private import ModelUtil
 private import semmle.code.cpp.models.interfaces.DataFlow
 private import semmle.code.cpp.models.interfaces.SideEffect
+private import DataFlowUtil
+private import DataFlowPrivate
+private import SsaInternals as Ssa
+private import semmle.code.cpp.dataflow.internal.FlowSummaryImpl as FlowSummaryImpl
+private import semmle.code.cpp.ir.dataflow.FlowSteps
 
 /**
  * Holds if taint propagates from `nodeFrom` to `nodeTo` in exactly one local
- * (intra-procedural) step.
+ * (intra-procedural) step. This relation is only used for local taint flow
+ * (for example `TaintTracking::localTaint(source, sink)`) so it may contain
+ * special cases that should only apply to local taint flow.
  */
 predicate localTaintStep(DataFlow::Node nodeFrom, DataFlow::Node nodeTo) {
+  // dataflow step
   DataFlow::localFlowStep(nodeFrom, nodeTo)
   or
-  localAdditionalTaintStep(nodeFrom, nodeTo)
+  // taint flow step
+  localAdditionalTaintStep(nodeFrom, nodeTo, _)
+  or
+  // models-as-data summarized flow for local data flow (i.e. special case for flow
+  // through calls to modeled functions, without relying on global dataflow to join
+  // the dots).
+  FlowSummaryImpl::Private::Steps::summaryThroughStepTaint(nodeFrom, nodeTo, _)
 }
 
 /**
@@ -20,30 +34,34 @@ predicate localTaintStep(DataFlow::Node nodeFrom, DataFlow::Node nodeTo) {
  * different objects.
  */
 cached
-predicate localAdditionalTaintStep(DataFlow::Node nodeFrom, DataFlow::Node nodeTo) {
-  operandToInstructionTaintStep(nodeFrom.asOperand(), nodeTo.asInstruction())
+predicate localAdditionalTaintStep(DataFlow::Node nodeFrom, DataFlow::Node nodeTo, string model) {
+  operandToInstructionTaintStep(nodeFrom.asOperand(), nodeTo.asInstruction()) and
+  model = ""
   or
-  instructionToOperandTaintStep(nodeFrom.asInstruction(), nodeTo.asOperand())
-}
-
-private predicate instructionToOperandTaintStep(Instruction fromInstr, Operand toOperand) {
-  // Propagate flow from the definition of an operand to the operand, even when the overlap is inexact.
-  // We only do this in certain cases:
-  // 1. The instruction's result must not be conflated, and
-  // 2. The instruction's result type is one the types where we expect element-to-object flow. Currently
-  // this is array types and union types. This matches the other two cases of element-to-object flow in
-  // `DefaultTaintTracking`.
-  toOperand.getAnyDef() = fromInstr and
-  not fromInstr.isResultConflated() and
-  (
-    fromInstr.getResultType() instanceof ArrayType or
-    fromInstr.getResultType() instanceof Union
-  )
+  modeledTaintStep(nodeFrom, nodeTo, model)
   or
-  exists(ReadSideEffectInstruction readInstr |
-    fromInstr = readInstr.getArgumentDef() and
-    toOperand = readInstr.getSideEffectOperand()
-  )
+  // Flow from (the indirection of) an operand of a pointer arithmetic instruction to the
+  // indirection of the pointer arithmetic instruction. This provides flow from `source`
+  // in `x[source]` to the result of the associated load instruction.
+  exists(PointerArithmeticInstruction pai, int indirectionIndex |
+    nodeHasOperand(nodeFrom, pai.getAnOperand(), pragma[only_bind_into](indirectionIndex)) and
+    hasInstructionAndIndex(nodeTo, pai, indirectionIndex + 1)
+  ) and
+  model = ""
+  or
+  any(Ssa::Indirection ind).isAdditionalTaintStep(nodeFrom, nodeTo) and
+  model = ""
+  or
+  // models-as-data summarized flow
+  FlowSummaryImpl::Private::Steps::summaryLocalStep(nodeFrom.(FlowSummaryNode).getSummaryNode(),
+    nodeTo.(FlowSummaryNode).getSummaryNode(), false, model)
+  or
+  // object->field conflation for content that is a `TaintInheritingContent`.
+  exists(DataFlow::ContentSet f |
+    readStep(nodeFrom, f, nodeTo) and
+    f.getAReadContent() instanceof TaintInheritingContent
+  ) and
+  model = ""
 }
 
 /**
@@ -61,12 +79,10 @@ private predicate operandToInstructionTaintStep(Operand opFrom, Instruction inst
     instrTo instanceof BitwiseInstruction
     or
     instrTo instanceof PointerArithmeticInstruction
-    or
-    // The `CopyInstruction` case is also present in non-taint data flow, but
-    // that uses `getDef` rather than `getAnyDef`. For taint, we want flow
-    // from a definition of `myStruct` to a `myStruct.myField` expression.
-    instrTo instanceof CopyInstruction
   )
+  or
+  // Taint flow from an address to its dereference.
+  Ssa::isDereference(instrTo, opFrom, _)
   or
   // Unary instructions tend to preserve enough information in practice that we
   // want taint to flow through.
@@ -82,39 +98,15 @@ private predicate operandToInstructionTaintStep(Operand opFrom, Instruction inst
     instrTo.(FieldAddressInstruction).getField().getDeclaringType() instanceof Union
   )
   or
-  // Flow from an element to an array or union that contains it.
-  instrTo.(ChiInstruction).getPartialOperand() = opFrom and
-  not instrTo.isResultConflated() and
-  exists(Type t | instrTo.getResultLanguageType().hasType(t, false) |
-    t instanceof Union
-    or
-    t instanceof ArrayType
-  )
-  or
-  // Until we have flow through indirections across calls, we'll take flow out
-  // of the indirection and into the argument.
-  // When we get proper flow through indirections across calls, this code can be
-  // moved to `adjusedSink` or possibly into the `DataFlow::ExprNode` class.
-  exists(ReadSideEffectInstruction read |
-    read.getSideEffectOperand() = opFrom and
-    read.getArgumentDef() = instrTo
-  )
-  or
-  // Until we have from through indirections across calls, we'll take flow out
-  // of the parameter and into its indirection.
-  // `InitializeIndirectionInstruction` only has a single operand: the address of the
-  // value whose indirection we are initializing. When initializing an indirection of a parameter `p`,
-  // the IR looks like this:
+  // Taint from int to boolean casts. This ensures that we have flow to `!x` in:
+  // ```cpp
+  // x = integer_source();
+  // if(!x) { ... }
   // ```
-  // m1 = InitializeParameter[p] : &r1
-  // r2 = Load[p] : r2, m1
-  // m3 = InitializeIndirection[p] : &r2
-  // ```
-  // So by having flow from `r2` to `m3` we're enabling flow from `m1` to `m3`. This relies on the
-  // `LoadOperand`'s overlap being exact.
-  instrTo.(InitializeIndirectionInstruction).getAnOperand() = opFrom
-  or
-  modeledTaintStep(opFrom, instrTo)
+  exists(Operand zero |
+    zero.getDef().(ConstantValueInstruction).getValue() = "0" and
+    instrTo.(CompareNEInstruction).hasOperands(opFrom, zero)
+  )
 }
 
 /**
@@ -146,8 +138,8 @@ predicate localExprTaint(Expr e1, Expr e2) {
  * Holds if the additional step from `src` to `sink` should be included in all
  * global taint flow configurations.
  */
-predicate defaultAdditionalTaintStep(DataFlow::Node src, DataFlow::Node sink) {
-  localAdditionalTaintStep(src, sink)
+predicate defaultAdditionalTaintStep(DataFlow::Node src, DataFlow::Node sink, string model) {
+  localAdditionalTaintStep(src, sink, model)
 }
 
 /**
@@ -155,7 +147,10 @@ predicate defaultAdditionalTaintStep(DataFlow::Node src, DataFlow::Node sink) {
  * of `c` at sinks and inputs to additional taint steps.
  */
 bindingset[node]
-predicate defaultImplicitTaintRead(DataFlow::Node node, DataFlow::Content c) { none() }
+predicate defaultImplicitTaintRead(DataFlow::Node node, DataFlow::ContentSet c) {
+  node instanceof ArgumentNode and
+  c.isSingleton(any(ElementContent ec))
+}
 
 /**
  * Holds if `node` should be a sanitizer in all global taint flow configurations
@@ -164,25 +159,20 @@ predicate defaultImplicitTaintRead(DataFlow::Node node, DataFlow::Content c) { n
 predicate defaultTaintSanitizer(DataFlow::Node node) { none() }
 
 /**
- * Holds if taint can flow from `instrIn` to `instrOut` through a call to a
+ * Holds if taint can flow from `nodeIn` to `nodeOut` through a call to a
  * modeled function.
  */
-predicate modeledTaintStep(Operand nodeIn, Instruction nodeOut) {
+predicate modeledTaintStep(DataFlow::Node nodeIn, DataFlow::Node nodeOut, string model) {
+  // Normal taint steps
   exists(CallInstruction call, TaintFunction func, FunctionInput modelIn, FunctionOutput modelOut |
-    (
-      nodeIn = callInput(call, modelIn)
-      or
-      exists(int n |
-        modelIn.isParameterDerefOrQualifierObject(n) and
-        if n = -1
-        then nodeIn = callInput(call, any(InQualifierObject inQualifier))
-        else nodeIn = callInput(call, any(InParameter inParam | inParam.getIndex() = n))
-      )
-    ) and
-    nodeOut = callOutput(call, modelOut) and
     call.getStaticCallTarget() = func and
     func.hasTaintFlow(modelIn, modelOut)
-  )
+  |
+    nodeIn = callInput(call, modelIn) and nodeOut = callOutput(call, modelOut)
+    or
+    exists(int d | nodeIn = callInput(call, modelIn, d) and nodeOut = callOutput(call, modelOut, d))
+  ) and
+  model = "TaintFunction"
   or
   // Taint flow from one argument to another and data flow from an argument to a
   // return value. This happens in functions like `strcat` and `memcpy`. We
@@ -199,24 +189,53 @@ predicate modeledTaintStep(Operand nodeIn, Instruction nodeOut) {
     func.(TaintFunction).hasTaintFlow(modelIn, modelMidOut) and
     func.(DataFlowFunction).hasDataFlow(modelMidIn, modelOut) and
     modelMidOut.isParameterDeref(indexMid) and
-    modelMidIn.isParameter(indexMid)
+    modelMidIn.isParameter(indexMid) and
+    model = "TaintFunction"
   )
   or
   // Taint flow from a pointer argument to an output, when the model specifies flow from the deref
   // to that output, but the deref is not modeled in the IR for the caller.
   exists(
-    CallInstruction call, ReadSideEffectInstruction read, Function func, FunctionInput modelIn,
-    FunctionOutput modelOut
+    CallInstruction call, DataFlow::SideEffectOperandNode indirectArgument, Function func,
+    FunctionInput modelIn, FunctionOutput modelOut
   |
-    read.getSideEffectOperand() = callInput(call, modelIn) and
-    read.getArgumentDef() = nodeIn.getDef() and
-    not read.getSideEffect().isResultModeled() and
+    indirectArgument = callInput(call, modelIn) and
+    indirectArgument.hasAddressOperandAndIndirectionIndex(nodeIn.asOperand(), _) and
     call.getStaticCallTarget() = func and
     (
-      func.(DataFlowFunction).hasDataFlow(modelIn, modelOut)
+      func.(DataFlowFunction).hasDataFlow(modelIn, modelOut) and
+      model = "DataFlowFunction"
       or
-      func.(TaintFunction).hasTaintFlow(modelIn, modelOut)
+      func.(TaintFunction).hasTaintFlow(modelIn, modelOut) and
+      model = "TaintFunction"
     ) and
     nodeOut = callOutput(call, modelOut)
   )
+}
+
+import SpeculativeTaintFlow
+
+private module SpeculativeTaintFlow {
+  private import semmle.code.cpp.ir.dataflow.internal.DataFlowDispatch as DataFlowDispatch
+  private import semmle.code.cpp.ir.dataflow.internal.DataFlowPrivate as DataFlowPrivate
+
+  /**
+   * Holds if the additional step from `src` to `sink` should be considered in
+   * speculative taint flow exploration.
+   */
+  predicate speculativeTaintStep(DataFlow::Node src, DataFlow::Node sink) {
+    exists(DataFlowCall call, ArgumentPosition argpos |
+      // TODO: exclude neutrals and anything that has QL modeling.
+      not exists(DataFlowDispatch::viableCallable(call)) and
+      src.(DataFlowPrivate::ArgumentNode).argumentOf(call, argpos)
+    |
+      not argpos.(DirectPosition).getIndex() = -1 and
+      sink.(PostUpdateNode)
+          .getPreUpdateNode()
+          .(DataFlowPrivate::ArgumentNode)
+          .argumentOf(call, any(DirectPosition qualpos | qualpos.getIndex() = -1))
+      or
+      sink.(DataFlowPrivate::OutNode).getCall() = call
+    )
+  }
 }

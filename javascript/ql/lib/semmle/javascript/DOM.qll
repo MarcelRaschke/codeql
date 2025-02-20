@@ -63,7 +63,8 @@ module DOM {
   /**
    * An HTML element, viewed as an `ElementDefinition`.
    */
-  private class HtmlElementDefinition extends ElementDefinition, @xmlelement instanceof HTML::Element {
+  private class HtmlElementDefinition extends ElementDefinition, @xmlelement instanceof HTML::Element
+  {
     override string getName() { result = HTML::Element.super.getName() }
 
     override AttributeDefinition getAttribute(int i) {
@@ -127,7 +128,8 @@ module DOM {
   /**
    * An HTML attribute, viewed as an `AttributeDefinition`.
    */
-  private class HtmlAttributeDefinition extends AttributeDefinition, @xmlattribute instanceof HTML::Attribute {
+  private class HtmlAttributeDefinition extends AttributeDefinition, @xmlattribute instanceof HTML::Attribute
+  {
     override string getName() { result = HTML::Attribute.super.getName() }
 
     override string getStringValue() { result = super.getValue() }
@@ -138,7 +140,8 @@ module DOM {
   /**
    * A JSX attribute, viewed as an `AttributeDefinition`.
    */
-  private class JsxAttributeDefinition extends AttributeDefinition, @jsx_attribute instanceof JsxAttribute {
+  private class JsxAttributeDefinition extends AttributeDefinition, @jsx_attribute instanceof JsxAttribute
+  {
     override string getName() { result = JsxAttribute.super.getName() }
 
     override DataFlow::Node getValueNode() {
@@ -385,23 +388,33 @@ module DOM {
     }
   }
 
-  /**
-   * Gets a reference to a DOM event.
-   */
-  private DataFlow::SourceNode domEventSource() {
-    // e.g. <form onSubmit={e => e.target}/>
-    exists(JsxAttribute attr | attr.getName().matches("on%") |
-      result = attr.getValue().flow().getABoundFunctionValue(0).getParameter(0)
-    )
-    or
-    // node.addEventListener("submit", e => e.target)
-    result = domValueRef().getAMethodCall("addEventListener").getABoundCallbackParameter(1, 0)
-    or
-    // node.onSubmit = (e => e.target);
-    exists(DataFlow::PropWrite write | write = domValueRef().getAPropertyWrite() |
-      write.getPropertyName().matches("on%") and
-      result = write.getRhs().getAFunctionValue().getParameter(0)
-    )
+  /** A data flow node that is a source of DOM events. */
+  class DomEventSource extends DataFlow::Node instanceof DomEventSource::Range { }
+
+  /** Companion module to the `DomEventSource` class. */
+  module DomEventSource {
+    /**
+     * A data flow node that should be considered a source of DOM events.
+     */
+    abstract class Range extends DataFlow::Node { }
+
+    private class DefaultRange extends Range {
+      DefaultRange() {
+        // e.g. <form onSubmit={e => e.target}/>
+        exists(JsxAttribute attr | attr.getName().matches("on%") |
+          this = attr.getValue().flow().getABoundFunctionValue(0).getParameter(0)
+        )
+        or
+        // node.addEventListener("submit", e => e.target)
+        this = domValueRef().getAMethodCall("addEventListener").getABoundCallbackParameter(1, 0)
+        or
+        // node.onSubmit = (e => e.target);
+        exists(DataFlow::PropWrite write | write = domValueRef().getAPropertyWrite() |
+          write.getPropertyName().matches("on%") and
+          this = write.getRhs().getAFunctionValue().getParameter(0)
+        )
+      }
+    }
   }
 
   /** Gets a data flow node that refers directly to a value from the DOM. */
@@ -416,7 +429,10 @@ module DOM {
     result = domValueRef().getAMethodCall(["item", "namedItem"])
     or
     t.startInProp("target") and
-    result = domEventSource()
+    result instanceof DomEventSource
+    or
+    t.startInProp(DataFlow::PseudoProperties::arrayElement()) and
+    result = domElementCollection()
     or
     exists(DataFlow::TypeTracker t2 | result = domValueRef(t2).track(t2, t))
   }
@@ -467,7 +483,8 @@ module DOM {
     // One step inlined in the beginning.
     exists(DataFlow::TypeTracker t2 |
       result =
-        any(DataFlow::Node n | n.hasUnderlyingType("Location")).getALocalSource().track(t2, t)
+        any(DataFlow::Node n | n.hasUnderlyingType("Location")).getALocalSource().track(t2, t) and
+      t2.start()
     )
     or
     exists(DataFlow::TypeTracker t2 | result = nonFirstLocationType(t2).track(t2, t))

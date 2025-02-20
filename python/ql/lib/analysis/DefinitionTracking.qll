@@ -221,10 +221,8 @@ pragma[noinline]
 private predicate module_and_name_for_import_star(
   ModuleObject mod, string name, ImportStarRefinement def
 ) {
-  exists(ImportStarNode im_star |
-    module_and_name_for_import_star_helper(mod, name, im_star, def) and
-    mod.exports(name)
-  )
+  module_and_name_for_import_star_helper(mod, name, _, def) and
+  mod.exports(name)
 }
 
 pragma[noinline]
@@ -412,7 +410,7 @@ private predicate sets_attribute(ArgumentRefinement def, string name) {
     call = def.getDefiningNode() and
     call.getFunction().refersTo(Object::builtin("setattr")) and
     def.getInput().getAUse() = call.getArg(0) and
-    call.getArg(1).getNode().(StrConst).getText() = name
+    call.getArg(1).getNode().(StringLiteral).getText() = name
   )
 }
 
@@ -484,9 +482,9 @@ class NiceLocationExpr extends Expr {
    */
   predicate hasLocationInfo(string f, int bl, int bc, int el, int ec) {
     /* Attribute location for x.y is that of 'y' so that url does not overlap with that of 'x' */
-    exists(int abl, int abc | this.(Attribute).getLocation().hasLocationInfo(f, abl, abc, el, ec) |
-      bl = el and bc = ec - this.(Attribute).getName().length() + 1
-    )
+    this.(Attribute).getLocation().hasLocationInfo(f, _, _, el, ec) and
+    bl = el and
+    bc = ec - this.(Attribute).getName().length() + 1
     or
     this.(Name).getLocation().hasLocationInfo(f, bl, bc, el, ec)
     or
@@ -494,9 +492,14 @@ class NiceLocationExpr extends Expr {
     // for `import xxx` or for `import xxx as yyy`.
     this.(ImportExpr).getLocation().hasLocationInfo(f, bl, bc, el, ec)
     or
-    /* Show y for `y` in `from xxx import y` */
-    exists(string name |
-      name = this.(ImportMember).getName() and
+    // Show y for `y` in `from xxx import y`
+    // and y for `yyy as y` in `from xxx import yyy as y`.
+    exists(string name, Alias alias |
+      // This alias will always exist, as `from xxx import y`
+      // is expanded to `from xxx imprt y as y`.
+      this = alias.getValue() and
+      name = alias.getAsname().(Name).getId()
+    |
       this.(ImportMember).getLocation().hasLocationInfo(f, _, _, el, ec) and
       bl = el and
       bc = ec - name.length() + 1

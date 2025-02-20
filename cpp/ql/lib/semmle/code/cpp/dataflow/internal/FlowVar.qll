@@ -1,11 +1,13 @@
 /**
+ * DEPRECATED: Use `semmle.code.cpp.dataflow.new.DataFlow` instead.
+ *
  * Provides a class for handling variables in the data flow analysis.
  */
 
 import cpp
 private import semmle.code.cpp.controlflow.SSA
-private import semmle.code.cpp.dataflow.internal.SubBasicBlocks
-private import semmle.code.cpp.dataflow.internal.AddressFlow
+private import SubBasicBlocks
+private import AddressFlow
 private import semmle.code.cpp.models.implementations.Iterator
 private import semmle.code.cpp.models.interfaces.PointerWrapper
 
@@ -450,10 +452,8 @@ module FlowVar_internal {
     }
 
     override string toString() {
-      exists(Expr e |
-        this.definedByExpr(e, _) and
-        result = "assignment to " + v
-      )
+      this.definedByExpr(_, _) and
+      result = "assignment to " + v
       or
       this.definedByInitialValue(_) and
       result = "initial value of " + v

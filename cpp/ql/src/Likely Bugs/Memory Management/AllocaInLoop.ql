@@ -14,7 +14,7 @@
 
 import cpp
 import semmle.code.cpp.rangeanalysis.RangeAnalysisUtils
-import semmle.code.cpp.dataflow.DataFlow
+import semmle.code.cpp.ir.dataflow.DataFlow
 
 /** Gets a loop that contains `e`. */
 Loop getAnEnclosingLoopOfExpr(Expr e) { result = getAnEnclosingLoopOfStmt(e.getEnclosingStmt()) }
@@ -35,6 +35,19 @@ class AllocaCall extends FunctionCall {
     (this.getTarget().getName() = "_alloca" or this.getTarget().getName() = "_malloca") and
     this.getTarget().getADeclarationEntry().getFile().getBaseName() = "malloc.h"
   }
+}
+
+/**
+ * Gets an expression associated with a dataflow node.
+ */
+private Expr getExpr(DataFlow::Node node) {
+  result = node.asInstruction().getAst()
+  or
+  result = node.asOperand().getUse().getAst()
+  or
+  result = node.(DataFlow::RawIndirectInstruction).getInstruction().getAst()
+  or
+  result = node.(DataFlow::RawIndirectOperand).getOperand().getUse().getAst()
 }
 
 /**
@@ -194,14 +207,11 @@ class LoopWithAlloca extends Stmt {
       va = var.getAnAccess() and
       this.conditionRequiresInequality(va, _, _) and
       DataFlow::localFlow(result, DataFlow::exprNode(va)) and
+      // Phi nodes will be preceded by nodes that represent actual definitions
+      not result instanceof DataFlow::SsaPhiNode and
+      not result instanceof DataFlow::SsaPhiInputNode and
       // A source is outside the loop if it's not inside the loop
-      not exists(Expr e |
-        e = result.asExpr()
-        or
-        e = result.asDefiningArgument()
-      |
-        this = getAnEnclosingLoopOfExpr(e)
-      )
+      not exists(Expr e | e = getExpr(result) | this = getAnEnclosingLoopOfExpr(e))
     )
   }
 
@@ -211,7 +221,11 @@ class LoopWithAlloca extends Stmt {
    */
   private int getAControllingVarInitialValue(Variable var, DataFlow::Node source) {
     source = this.getAPrecedingDef(var) and
-    result = source.asExpr().getValue().toInt()
+    (
+      result = getExpr(source).getValue().toInt()
+      or
+      result = getExpr(source).(Assignment).getRValue().getValue().toInt()
+    )
   }
 
   /**

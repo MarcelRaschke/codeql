@@ -19,7 +19,8 @@ class SpringBean extends SpringXmlElement {
     not this.getNamespace().getUri() = "http://camel.apache.org/schema/spring"
   }
 
-  override string toString() { result = this.getBeanIdentifier() }
+  /** Gets a printable representation of this XML element. */
+  string toString() { result = this.getBeanIdentifier() }
 
   /**
    * Holds if this element is a top-level bean definition.
@@ -151,11 +152,9 @@ class SpringBean extends SpringXmlElement {
 
   /** Gets the Java method that corresponds to the bean's `destroy-method`. */
   Method getDestroyMethod() {
-    exists(RefType superType |
-      this.getClass().hasMethod(result, superType) and
-      result.getName() = this.getDestroyMethodName() and
-      result.getNumberOfParameters() = 0
-    )
+    this.getClass().hasMethod(result, _) and
+    result.getName() = this.getDestroyMethodName() and
+    result.getNumberOfParameters() = 0
   }
 
   /** Holds if the bean has a `factory-bean` attribute. */
@@ -216,11 +215,9 @@ class SpringBean extends SpringXmlElement {
 
   /** Gets the Java method that the `init-method` corresponds to. */
   Method getInitMethod() {
-    exists(RefType superType |
-      this.getClass().hasMethod(result, superType) and
-      result.getName() = this.getInitMethodName() and
-      result.getNumberOfParameters() = 0
-    )
+    this.getClass().hasMethod(result, _) and
+    result.getName() = this.getInitMethodName() and
+    result.getNumberOfParameters() = 0
   }
 
   /** Gets the name of the bean's parent bean. */

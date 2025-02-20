@@ -1,8 +1,7 @@
+using System.IO;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Semmle.Extraction.Entities;
-using System.IO;
 
 namespace Semmle.Extraction.CSharp.Entities
 {
@@ -21,9 +20,12 @@ namespace Semmle.Extraction.CSharp.Entities
 
         protected override void Populate(TextWriter trapFile)
         {
-            var info = Context.GetModel(node).GetSymbolInfo(node.Name);
+            // This is guaranteed to be non-null as we only deal with "using namespace" not "using X = Y"
+            var name = node.Name!;
 
-            if (node.StaticKeyword.Kind() == SyntaxKind.None)
+            var info = Context.GetModel(node).GetSymbolInfo(name);
+
+            if (node.StaticKeyword.IsKind(SyntaxKind.None))
             {
                 // A normal using
                 if (info.Symbol is INamespaceSymbol namespaceSymbol)
@@ -34,7 +36,7 @@ namespace Semmle.Extraction.CSharp.Entities
                 }
                 else
                 {
-                    Context.Extractor.MissingNamespace(node.Name.ToFullString(), Context.FromSource);
+                    Context.ExtractionContext.MissingNamespace(name.ToFullString(), Context.FromSource);
                     Context.ModelError(node, "Namespace not found");
                     return;
                 }
@@ -47,7 +49,7 @@ namespace Semmle.Extraction.CSharp.Entities
                 trapFile.using_directive_location(this, Context.CreateLocation(ReportingLocation));
             }
 
-            if (node.GlobalKeyword.Kind() == SyntaxKind.GlobalKeyword)
+            if (node.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword))
             {
                 trapFile.using_global(this);
             }

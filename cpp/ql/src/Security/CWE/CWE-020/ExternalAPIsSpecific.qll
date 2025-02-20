@@ -2,7 +2,7 @@
  * Provides AST-specific definitions for use in the `ExternalAPI` library.
  */
 
-import semmle.code.cpp.dataflow.TaintTracking
+import semmle.code.cpp.ir.dataflow.TaintTracking
 import semmle.code.cpp.models.interfaces.FlowSource
 import semmle.code.cpp.models.interfaces.DataFlow
 import SafeExternalAPIFunction
@@ -41,22 +41,16 @@ class ExternalApiDataNode extends DataFlow::Node {
   string getFunctionDescription() { result = this.getExternalFunction().toString() }
 }
 
-/** DEPRECATED: Alias for ExternalApiDataNode */
-deprecated class ExternalAPIDataNode = ExternalApiDataNode;
-
 /** A configuration for tracking flow from `RemoteFlowSource`s to `ExternalApiDataNode`s. */
-class UntrustedDataToExternalApiConfig extends TaintTracking::Configuration {
-  UntrustedDataToExternalApiConfig() { this = "UntrustedDataToExternalAPIConfig" }
-
-  override predicate isSource(DataFlow::Node source) {
+private module UntrustedDataToExternalApiConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node source) {
     exists(RemoteFlowSourceFunction remoteFlow |
       remoteFlow = source.asExpr().(Call).getTarget() and
       remoteFlow.hasRemoteFlowSource(_, _)
     )
   }
 
-  override predicate isSink(DataFlow::Node sink) { sink instanceof ExternalApiDataNode }
+  predicate isSink(DataFlow::Node sink) { sink instanceof ExternalApiDataNode }
 }
 
-/** DEPRECATED: Alias for UntrustedDataToExternalApiConfig */
-deprecated class UntrustedDataToExternalAPIConfig = UntrustedDataToExternalApiConfig;
+module UntrustedDataToExternalApiFlow = TaintTracking::Global<UntrustedDataToExternalApiConfig>;

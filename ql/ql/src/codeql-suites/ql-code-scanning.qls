@@ -7,12 +7,21 @@
     - alert
     - path-alert
     precision:
+    - medium
     - high
     - very-high
     problem.severity:
     - error
     - warning
     - recommendation
+- include:
+    kind:
+    - diagnostic
+- include:
+    kind:
+    - metric
+    tags contain:
+    - summary
 - exclude:
     deprecated: //
 - exclude:

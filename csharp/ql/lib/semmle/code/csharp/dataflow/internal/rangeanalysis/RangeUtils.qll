@@ -152,7 +152,7 @@ private module Impl {
    */
   predicate propertyOverrides(Property p, string namespace, string baseClass, string property) {
     exists(Property p2 |
-      p2.getUnboundDeclaration().getDeclaringType().hasQualifiedName(namespace, baseClass) and
+      p2.getUnboundDeclaration().getDeclaringType().hasFullyQualifiedName(namespace, baseClass) and
       p2.hasName(property)
     |
       p.overridesOrImplementsOrEquals(p2)
@@ -391,17 +391,24 @@ module ExprNode {
   }
 
   /** A left-shift operation. */
-  class LShiftExpr extends BinaryOperation {
-    override CS::LShiftExpr e;
+  class LeftShiftExpr extends BinaryOperation {
+    override CS::LeftShiftExpr e;
 
-    override TLShiftOp getOp() { any() }
+    override TLeftShiftOp getOp() { any() }
   }
 
   /** A right-shift operation. */
-  class RShiftExpr extends BinaryOperation {
-    override CS::RShiftExpr e;
+  class RightShiftExpr extends BinaryOperation {
+    override CS::RightShiftExpr e;
 
-    override TRShiftOp getOp() { any() }
+    override TRightShiftOp getOp() { any() }
+  }
+
+  /** An unsigned right-shift operation. */
+  class UnsignedRightShiftExpr extends BinaryOperation {
+    override CS::UnsignedRightShiftExpr e;
+
+    override TUnsignedRightShiftOp getOp() { any() }
   }
 
   /** A conditional expression. */

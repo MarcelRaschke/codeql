@@ -1,11 +1,13 @@
 import java
 import semmle.code.java.dataflow.FlowSources
-import TestUtilities.InlineFlowTest
+import utils.test.InlineFlowTest
 
-class ProviderTaintFlowConf extends DefaultTaintFlowConf {
-  override predicate isSource(DataFlow::Node n) { n instanceof RemoteFlowSource }
+module ProviderTaintFlowConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node n) { n instanceof ActiveThreatModelSource }
+
+  predicate isSink(DataFlow::Node n) { DefaultFlowConfig::isSink(n) }
+
+  int fieldFlowBranchLimit() { result = DefaultFlowConfig::fieldFlowBranchLimit() }
 }
 
-class ProviderInlineFlowTest extends InlineFlowTest {
-  override DataFlow::Configuration getValueFlowConfig() { none() }
-}
+import TaintFlowTest<ProviderTaintFlowConfig>

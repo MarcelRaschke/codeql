@@ -212,10 +212,7 @@ class MethodDecl extends FuncDecl {
    *
    * is `Rectangle`.
    */
-  NamedType getReceiverBaseType() {
-    result = this.getReceiverType() or
-    result = this.getReceiverType().(PointerType).getBaseType()
-  }
+  DefinedType getReceiverBaseType() { result = lookThroughPointerType(this.getReceiverType()) }
 
   /**
    * Gets the receiver variable of this method.
@@ -416,8 +413,35 @@ class AliasSpec extends @aliasspec, TypeSpec { }
 class TypeDefSpec extends @typedefspec, TypeSpec { }
 
 /**
- * A field declaration, of a struct, a function (in which case this is a parameter or result variable),
- * or an interface (in which case this is a method or embedding spec).
+ * A field declaration, in a struct, a function (for parameter or result
+ * variables), or an interface (in which case this is a method or embedding
+ * spec).
+ *
+ * Examples:
+ *
+ * ```go
+ * Name string `json:"name"`
+ * s string
+ * x, y int
+ * p *Point
+ * Close() error
+ * io.Reader
+ * ~int | float32
+ * ```
+ * as in the following code:
+ * ```go
+ * struct {
+ *   io.Reader
+ *   Name string `json:"name"`
+ *   x, y int
+ * }
+ * func (p *Point) f(s string) (x, y int) { }
+ * type MyInterface interface {
+ *   Close() error
+ *   io.Reader
+ *   ~int32 | float32
+ * }
+ * ```
  */
 class FieldBase extends @field, ExprParent {
   /**
@@ -433,6 +457,22 @@ class FieldBase extends @field, ExprParent {
 
 /**
  * A field declaration in a struct type.
+ *
+ * Examples:
+ *
+ * ```go
+ * Name string `json:"name"`
+ * x, y int
+ * ```
+ *
+ * as in the following code:
+ *
+ * ```go
+ * struct {
+ *   Name string `json:"name"`
+ *   x, y int
+ * }
+ * ```
  */
 class FieldDecl extends FieldBase, Documentable, ExprParent {
   StructTypeExpr st;
@@ -464,6 +504,20 @@ class FieldDecl extends FieldBase, Documentable, ExprParent {
 
 /**
  * An embedded field declaration in a struct.
+ *
+ * Examples:
+ *
+ * ```go
+ * io.Reader
+ * ```
+ *
+ * as in the following code:
+ *
+ * ```go
+ * struct {
+ *   io.Reader
+ * }
+ * ```
  */
 class EmbeddedFieldDecl extends FieldDecl {
   EmbeddedFieldDecl() { not exists(this.getNameExpr(_)) }
@@ -473,6 +527,20 @@ class EmbeddedFieldDecl extends FieldDecl {
 
 /**
  * A function parameter or result variable declaration.
+ *
+ * Examples:
+ *
+ * ```go
+ * s string
+ * x, y int
+ * ```
+ *
+ * as in the following code:
+ *
+ * ```go
+ * func f(s string, x, y int) { }
+ * func g() (s string, x, y int){ return }
+ * ```
  */
 class ParameterOrResultDecl extends FieldBase, Documentable, ExprParent {
   int rawIndex;
@@ -507,6 +575,19 @@ class ParameterOrResultDecl extends FieldBase, Documentable, ExprParent {
 
 /**
  * A parameter declaration.
+ *
+ * Examples:
+ *
+ * ```go
+ * s string
+ * x, y int
+ * ```
+ *
+ * as in the following code:
+ *
+ * ```go
+ * func f(s string, x, y int) { }
+ * ```
  */
 class ParameterDecl extends ParameterOrResultDecl {
   ParameterDecl() { rawIndex >= 0 }
@@ -524,6 +605,20 @@ class ParameterDecl extends ParameterOrResultDecl {
 
 /**
  * A receiver declaration in a function declaration.
+ *
+ * Examples:
+ *
+ * ```go
+ * p *Point
+ * r io.Reader
+ * ```
+ *
+ * as in the following code:
+ *
+ * ```go
+ * func (p *Point) f() { }
+ * func (r io.Reader) g() { }
+ * ```
  */
 class ReceiverDecl extends FieldBase, Documentable, ExprParent {
   FuncDecl fd;
@@ -547,6 +642,32 @@ class ReceiverDecl extends FieldBase, Documentable, ExprParent {
 
 /**
  * A result variable declaration.
+ *
+ * Examples:
+ *
+ * ```go
+ * int
+ * string
+ * error
+ * r io.Reader
+ * output string
+ * err error
+ * x, y int
+ * ```
+ *
+ * as in the following code:
+ *
+ * ```go
+ * func f1() int { return 0 }
+ * func f2(input string) (string, error) { return "", nil }
+ * func f3(a int) (r io.Reader) { return nil }
+ * func f4(input string) (output string, err error) { return}
+ * func f5(e error) (x, y int) { return }
+ * ```
+ *
+ * Note: `x, y int` is a single `ResultVariableDecl` even though it declares
+ * two different result variables. Use the member predicate `getTypeExpr()` to
+ * get `int`, `getNameExpr(0)` to get `x` and `getNameExpr(1)` to get `y`.
  */
 class ResultVariableDecl extends ParameterOrResultDecl {
   ResultVariableDecl() { rawIndex < 0 }
@@ -564,6 +685,22 @@ class ResultVariableDecl extends ParameterOrResultDecl {
 
 /**
  * A type parameter declaration in a type specification.
+ *
+ * Examples:
+ *
+ * ```go
+ * S, T comparable
+ * U any
+ * K ~int32 | float32
+ * _ any
+ * ```
+ *
+ * as in the following code:
+ *
+ * ```go
+ * type GenericStruct[S, T comparable, U any, K ~int32 | float32, _ any] struct { }
+ * func GenericFunction[S, T comparable, U any, K ~int32 | float32, _ any]() {}
+ * ```
  */
 class TypeParamDecl extends @typeparamdecl, Documentable, ExprParent {
   TypeParamDecl() { typeparamdecls(this, _, _) }
@@ -615,6 +752,24 @@ class TypeParamDecl extends @typeparamdecl, Documentable, ExprParent {
 
 /**
  * A method or embedding specification in an interface type expression.
+ *
+ * Examples:
+ *
+ * ```go
+ * Close() error
+ * io.Reader
+ * ~int32 | float32
+ * ```
+ *
+ * as in the following code:
+ *
+ * ```go
+ * type MyInterface interface {
+ *   Close() error
+ *   io.Reader
+ *   ~int32 | float32
+ * }
+ * ```
  */
 class InterfaceMemberSpec extends FieldBase, Documentable, ExprParent {
   InterfaceTypeExpr ite;
@@ -636,6 +791,20 @@ class InterfaceMemberSpec extends FieldBase, Documentable, ExprParent {
 
 /**
  * A method specification in an interface.
+ *
+ * Examples:
+ *
+ * ```go
+ * Close() error
+ * ```
+ *
+ * as in the following code:
+ *
+ * ```go
+ * type MyInterface interface {
+ *   Close() error
+ * }
+ * ```
  */
 class MethodSpec extends InterfaceMemberSpec {
   Expr name;
@@ -654,6 +823,22 @@ class MethodSpec extends InterfaceMemberSpec {
 
 /**
  * An embedding specification in an interface.
+ *
+ * Examples:
+ *
+ * ```go
+ * io.Reader
+ * ~int32 | float32
+ * ```
+ *
+ * as in the following code:
+ *
+ * ```go
+ * type MyInterface interface {
+ *   io.Reader
+ *   ~int32 | float32
+ * }
+ * ```
  */
 class EmbeddingSpec extends InterfaceMemberSpec {
   EmbeddingSpec() { not exists(this.getChildExpr(1)) }

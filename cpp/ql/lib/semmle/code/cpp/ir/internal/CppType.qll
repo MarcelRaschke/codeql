@@ -1,5 +1,4 @@
 private import cpp
-private import semmle.code.cpp.Print
 private import semmle.code.cpp.ir.implementation.IRType
 private import semmle.code.cpp.ir.implementation.raw.internal.IRConstruction::Raw as Raw
 
@@ -12,7 +11,7 @@ private int getTypeSizeWorkaround(Type type) {
   exists(Type unspecifiedType |
     unspecifiedType = type.getUnspecifiedType() and
     (
-      unspecifiedType instanceof FunctionReferenceType and
+      (unspecifiedType instanceof FunctionReferenceType or unspecifiedType instanceof RoutineType) and
       result = getPointerSize()
       or
       exists(PointerToMemberType ptmType |
@@ -177,7 +176,7 @@ private IRType getIRTypeForPRValue(Type type) {
     isPointerIshType(unspecifiedType) and
     result.(IRAddressType).getByteSize() = getTypeSize(unspecifiedType)
     or
-    unspecifiedType instanceof FunctionPointerIshType and
+    (unspecifiedType instanceof FunctionPointerIshType or unspecifiedType instanceof RoutineType) and
     result.(IRFunctionAddressType).getByteSize() = getTypeSize(type)
     or
     unspecifiedType instanceof VoidType and result instanceof IRVoidType
@@ -209,10 +208,10 @@ class CppType extends TCppType {
   string toString() { none() }
 
   /** Gets a string used in IR dumps */
-  string getDumpString() { result = toString() }
+  string getDumpString() { result = this.toString() }
 
   /** Gets the size of the type in bytes, if known. */
-  final int getByteSize() { result = getIRType().getByteSize() }
+  final int getByteSize() { result = this.getIRType().getByteSize() }
 
   /**
    * Gets the `IRType` that represents this `CppType`. Many different `CppType`s can map to a single
@@ -228,13 +227,25 @@ class CppType extends TCppType {
   predicate hasType(Type type, boolean isGLValue) { none() }
 
   /**
-   * Holds if this type represents the C++ type `type`. If `isGLValue` is `true`, then this type
+   * Holds if this type represents the C++ unspecified type `type`. If `isGLValue` is `true`, then this type
    * represents a glvalue of type `type`. Otherwise, it represents a prvalue of type `type`.
    */
   final predicate hasUnspecifiedType(Type type, boolean isGLValue) {
     exists(Type specifiedType |
-      hasType(specifiedType, isGLValue) and
+      this.hasType(specifiedType, isGLValue) and
       type = specifiedType.getUnspecifiedType()
+    )
+  }
+
+  /**
+   * Holds if this type represents the C++ type `type` (after resolving
+   * typedefs). If `isGLValue` is `true`, then this type represents a glvalue
+   * of type `type`. Otherwise, it represents a prvalue of type `type`.
+   */
+  final predicate hasUnderlyingType(Type type, boolean isGLValue) {
+    exists(Type typedefType |
+      this.hasType(typedefType, isGLValue) and
+      type = typedefType.getUnderlyingType()
     )
   }
 }
@@ -538,12 +549,14 @@ CppType getCanonicalOpaqueType(Type tag, int byteSize) {
 }
 
 /**
- * Gets a string that uniquely identifies an `IROpaqueType` tag. This may be different from the usual
- * `toString()` of the tag in order to ensure uniqueness.
+ * Gets a string that uniquely identifies an `IROpaqueType` tag. Using `toString` here might
+ * not be sufficient to ensure uniqueness, but suffices for our current debugging purposes.
+ * To ensure uniqueness `getOpaqueTagIdentityString` from `semmle.code.cpp.Print` could be used,
+ * but that comes at the cost of importing all the `Dump` classes defined in that library.
  */
 string getOpaqueTagIdentityString(Type tag) {
   hasOpaqueType(tag, _) and
-  result = getTypeIdentityString(tag)
+  result = tag.toString()
 }
 
 module LanguageTypeConsistency {

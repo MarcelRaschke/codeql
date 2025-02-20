@@ -5,15 +5,16 @@
  * @problem.severity error
  * @id go/weak-crypto-algorithm
  * @tags security
- *         external/cwe/cwe-327
- *         external/cwe/cwe-328
+ *       experimental
+ *       external/cwe/cwe-327
+ *       external/cwe/cwe-328
  */
 
 import go
-import WeakCryptoAlgorithmCustomizations::WeakCryptoAlgorithm
-import DataFlow::PathGraph
+import WeakCryptoAlgorithmCustomizations
+import WeakCryptoAlgorithm::Flow::PathGraph
 
-from Configuration cfg, DataFlow::PathNode source, DataFlow::PathNode sink
-where cfg.hasFlowPath(source, sink)
+from WeakCryptoAlgorithm::Flow::PathNode source, WeakCryptoAlgorithm::Flow::PathNode sink
+where WeakCryptoAlgorithm::Flow::flowPath(source, sink)
 select sink.getNode(), source, sink, "$@ is used in a weak cryptographic algorithm.",
   source.getNode(), "Sensitive data"

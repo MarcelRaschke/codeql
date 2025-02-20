@@ -4,22 +4,76 @@ import Callable
 import Element
 import Modifier
 import Variable
-private import dotnet
 private import Implements
 private import TypeRef
+private import commons.QualifiedName
+
+private module QualifiedNameInput implements QualifiedNameInputSig {
+  string getUnboundGenericSuffix(UnboundGeneric ug) {
+    result = "<" + strictconcat(int i | exists(ug.getTypeParameter(i)) | "", ",") + ">"
+  }
+}
+
+private module FullyQualifiedNameInput implements QualifiedNameInputSig {
+  string getUnboundGenericSuffix(UnboundGeneric ug) {
+    result = "`" + ug.getNumberOfTypeParameters()
+  }
+}
 
 /**
  * A declaration.
  *
  * Either a modifiable (`Modifiable`) or an assignable (`Assignable`).
  */
-class Declaration extends DotNet::Declaration, Element, @declaration {
-  override ValueOrRefType getDeclaringType() { none() }
+class Declaration extends NamedElement, @declaration {
+  /** Gets the name of this declaration, without additional decoration such as `<...>`. */
+  string getUndecoratedName() { none() }
+
+  /** Holds if this element has undecorated name 'name'. */
+  final predicate hasUndecoratedName(string name) { name = this.getUndecoratedName() }
+
+  /**
+   * Gets the unbound version of this declaration, that is, the declaration where
+   * all type arguments have been removed. For example, in
+   *
+   * ```csharp
+   * class C<T>
+   * {
+   *     class Nested
+   *     {
+   *     }
+   *
+   *     void Method<S>() { }
+   * }
+   * ```
+   *
+   * we have the following
+   *
+   * | Declaration             | Unbound declaration |
+   * |-------------------------|---------------------|
+   * | `C<int>`                | ``C`1``             |
+   * | ``C`1.Nested``          | ``C`1.Nested``      |
+   * | `C<int>.Nested`         | ``C`1.Nested``      |
+   * | ``C`1.Method`1``        | ``C`1.Method`1``    |
+   * | ``C<int>.Method`1``     | ``C`1.Method`1``    |
+   * | `C<int>.Method<string>` | ``C`1.Method`1``    |
+   */
+  Declaration getUnboundDeclaration() { result = this }
+
+  /** Holds if this declaration is unbound. */
+  final predicate isUnboundDeclaration() { this.getUnboundDeclaration() = this }
+
+  /** Gets the type containing this declaration, if any. */
+  ValueOrRefType getDeclaringType() { none() }
 
   /** Holds if this declaration is unconstructed and in source code. */
   final predicate isSourceDeclaration() { this.fromSource() and this.isUnboundDeclaration() }
 
   override string toString() { result = this.getName() }
+
+  override predicate hasFullyQualifiedName(string qualifier, string name) {
+    QualifiedName<FullyQualifiedNameInput>::hasQualifiedName(this, qualifier, name)
+  }
 
   /**
    * Gets the fully qualified name of this declaration, including types, for example
@@ -33,12 +87,13 @@ class Declaration extends DotNet::Declaration, Element, @declaration {
    * }
    * ```
    */
-  string getQualifiedNameWithTypes() {
-    exists(string qual |
-      qual = this.getDeclaringType().getQualifiedName() and
+  deprecated string getFullyQualifiedNameWithTypes() {
+    exists(string fullqual, string qual, string name |
+      this.getDeclaringType().hasFullyQualifiedName(qual, name) and
+      fullqual = getQualifiedName(qual, name) and
       if this instanceof NestedType
-      then result = qual + "+" + this.toStringWithTypes()
-      else result = qual + "." + this.toStringWithTypes()
+      then result = fullqual + "+" + this.toStringWithTypes()
+      else result = fullqual + "." + this.toStringWithTypes()
     )
   }
 
@@ -90,12 +145,29 @@ class Modifiable extends Declaration, @modifiable {
   /** Holds if this declaration is `const`. */
   predicate isConst() { this.hasModifier("const") }
 
+  /** Holds if this declaration has the modifier `required`. */
+  predicate isRequired() { this.hasModifier("required") }
+
+  /** Holds if this declaration is `file` local. */
+  predicate isFile() { this.hasModifier("file") }
+
   /** Holds if this declaration is `unsafe`. */
   predicate isUnsafe() {
-    this.hasModifier("unsafe") or
-    this.(Parameterizable).getAParameter().getType() instanceof PointerType or
-    this.(Property).getType() instanceof PointerType or
-    this.(Callable).getReturnType() instanceof PointerType
+    this.hasModifier("unsafe")
+    or
+    exists(Type t, Type child |
+      t = this.(Parameterizable).getAParameter().getType() or
+      t = this.(Property).getType() or
+      t = this.(Callable).getReturnType() or
+      t = this.(DelegateType).getReturnType()
+    |
+      child = t.getAChild*() and
+      (
+        child instanceof PointerType
+        or
+        child instanceof FunctionPointerType
+      )
+    )
   }
 
   /** Holds if this declaration is `async`. */
@@ -161,30 +233,25 @@ class Modifiable extends Declaration, @modifiable {
 }
 
 /** A declaration that is a member of a type. */
-class Member extends DotNet::Member, Modifiable, @member {
+class Member extends Modifiable, @member {
   /** Gets an access to this member. */
   MemberAccess getAnAccess() { result.getTarget() = this }
 
-  override predicate isPublic() { Modifiable.super.isPublic() }
-
-  override predicate isProtected() { Modifiable.super.isProtected() }
-
-  override predicate isPrivate() { Modifiable.super.isPrivate() }
-
-  override predicate isInternal() { Modifiable.super.isInternal() }
-
-  override predicate isSealed() { Modifiable.super.isSealed() }
-
-  override predicate isAbstract() { Modifiable.super.isAbstract() }
-
-  override predicate isStatic() { Modifiable.super.isStatic() }
+  /**
+   * Holds if this member has name `name` and is defined in type `type`
+   * with namespace `namespace`.
+   */
+  cached
+  final predicate hasFullyQualifiedName(string namespace, string type, string name) {
+    QualifiedName<FullyQualifiedNameInput>::hasQualifiedName(this, namespace, type, name)
+  }
 }
 
 private class TOverridable = @virtualizable or @callable_accessor;
 
 /**
  * A declaration that can be overridden or implemented. That is, a method,
- * a property, an indexer, an event, or an accessor.
+ * a property, an indexer, an event, an accessor, or an operator.
  *
  * Unlike `Virtualizable`, this class includes accessors.
  */
@@ -194,7 +261,12 @@ class Overridable extends Declaration, TOverridable {
    * to members that can be declared on an interface, i.e. methods, properties,
    * indexers and events.
    */
-  Interface getExplicitlyImplementedInterface() { explicitly_implements(this, getTypeRef(result)) }
+  Interface getExplicitlyImplementedInterface() {
+    explicitly_implements(this, result)
+    or
+    not explicitly_implements(this, any(Interface i)) and
+    explicitly_implements(this, getTypeRef(result))
+  }
 
   /**
    * Holds if this member implements an interface member explicitly.
@@ -360,7 +432,7 @@ class Overridable extends Declaration, TOverridable {
 
 /**
  * A member where the `virtual` modifier is valid. That is, a method,
- * a property, an indexer, or an event.
+ * a property, an indexer, an event, or an operator.
  *
  * Equivalently, these are the members that can be defined in an interface.
  *
@@ -399,10 +471,24 @@ class Virtualizable extends Overridable, Member, @virtualizable {
  * A parameterizable declaration. Either a callable (`Callable`), a delegate
  * type (`DelegateType`), or an indexer (`Indexer`).
  */
-class Parameterizable extends DotNet::Parameterizable, Declaration, @parameterizable {
-  override Parameter getRawParameter(int i) { params(result, _, _, i, _, this, _) }
+class Parameterizable extends Declaration, @parameterizable {
+  /** Gets raw parameter `i`, including the `this` parameter at index 0. */
+  Parameter getRawParameter(int i) { params(result, _, _, i, _, this, _) }
 
-  override Parameter getParameter(int i) { params(result, _, _, i, _, this, _) }
+  /** Gets the `i`th parameter, excluding the `this` parameter. */
+  Parameter getParameter(int i) { params(result, _, _, i, _, this, _) }
+
+  /** Gets the number of parameters of this callable. */
+  int getNumberOfParameters() { result = count(this.getAParameter()) }
+
+  /** Holds if this declaration has no parameters. */
+  predicate hasNoParameters() { not exists(this.getAParameter()) }
+
+  /** Gets a parameter, if any. */
+  Parameter getAParameter() { result = this.getParameter(_) }
+
+  /** Gets a raw parameter (including the qualifier), if any. */
+  final Parameter getARawParameter() { result = this.getRawParameter(_) }
 
   /**
    * Gets the type of the parameter, possibly prefixed

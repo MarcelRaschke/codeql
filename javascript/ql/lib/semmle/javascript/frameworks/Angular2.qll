@@ -8,6 +8,7 @@ private import semmle.javascript.security.dataflow.CodeInjectionCustomizations
 private import semmle.javascript.security.dataflow.ClientSideUrlRedirectCustomizations
 private import semmle.javascript.DynamicPropertyAccess
 private import semmle.javascript.dataflow.internal.PreCallGraphStep
+private import semmle.javascript.ViewComponentInput
 
 /**
  * Provides classes for working with Angular (also known as Angular 2.x) applications.
@@ -196,19 +197,19 @@ module Angular2 {
       this = httpClient().getAMethodCall("request") and argumentOffset = 1
       or
       this = httpClient().getAMethodCall() and
-      not getMethodName() = "request" and
+      not this.getMethodName() = "request" and
       argumentOffset = 0
     }
 
-    override DataFlow::Node getUrl() { result = getArgument(argumentOffset) }
+    override DataFlow::Node getUrl() { result = this.getArgument(argumentOffset) }
 
     override DataFlow::Node getHost() { none() }
 
     override DataFlow::Node getADataNode() {
-      getMethodName() = ["patch", "post", "put"] and
-      result = getArgument(argumentOffset + 1)
+      this.getMethodName() = ["patch", "post", "put"] and
+      result = this.getArgument(argumentOffset + 1)
       or
-      result = getOptionArgument(argumentOffset + 1, "body")
+      result = this.getOptionArgument(argumentOffset + 1, "body")
     }
 
     override DataFlow::Node getAResponseDataNode(string responseType, boolean promise) {
@@ -268,7 +269,7 @@ module Angular2 {
     DataFlow::CallNode decorator;
 
     ComponentClass() {
-      decorator = getADecorator() and
+      decorator = this.getADecorator() and
       decorator = DataFlow::moduleMember("@angular/core", "Component").getACall()
     }
 
@@ -289,9 +290,9 @@ module Angular2 {
      * this component.
      */
     DataFlow::Node getFieldInputNode(string name) {
-      result = getFieldNode(name)
+      result = this.getFieldNode(name)
       or
-      result = getInstanceMember(name, DataFlow::MemberKind::setter()).getParameter(0)
+      result = this.getInstanceMember(name, DataFlow::MemberKind::setter()).getParameter(0)
     }
 
     /**
@@ -299,11 +300,11 @@ module Angular2 {
      * of this component.
      */
     DataFlow::Node getFieldOutputNode(string name) {
-      result = getFieldNode(name)
+      result = this.getFieldNode(name)
       or
-      result = getInstanceMember(name, DataFlow::MemberKind::getter()).getReturnNode()
+      result = this.getInstanceMember(name, DataFlow::MemberKind::getter()).getReturnNode()
       or
-      result = getInstanceMethod(name)
+      result = this.getInstanceMethod(name)
     }
 
     /**
@@ -312,7 +313,7 @@ module Angular2 {
     string getSelector() { decorator.getOptionArgument(0, "selector").mayHaveStringValue(result) }
 
     /** Gets an HTML element that instantiates this component. */
-    HTML::Element getATemplateInstantiation() { result.getName() = getSelector() }
+    HTML::Element getATemplateInstantiation() { result.getName() = this.getSelector() }
 
     /**
      * Gets an argument that flows into the `name` field of this component.
@@ -323,7 +324,8 @@ module Angular2 {
      */
     DataFlow::Node getATemplateArgument(string name) {
       result =
-        getAttributeValueAsNode(getATemplateInstantiation().getAttributeByName("[" + name + "]"))
+        getAttributeValueAsNode(this.getATemplateInstantiation()
+              .getAttributeByName("[" + name + "]"))
     }
 
     /**
@@ -338,7 +340,7 @@ module Angular2 {
 
     /** Gets an element in the HTML template of this component. */
     HTML::Element getATemplateElement() {
-      result.getFile() = getTemplateFile()
+      result.getFile() = this.getTemplateFile()
       or
       result.getParent*() =
         HTML::getHtmlElementFromExpr(decorator.getOptionArgument(0, "template").asExpr(), _)
@@ -349,7 +351,7 @@ module Angular2 {
      */
     DataFlow::SourceNode getATemplateVarAccess(string name) {
       result =
-        getATemplateElement()
+        this.getATemplateElement()
             .getAnAttribute()
             .getCodeInAttribute()
             .(TemplateTopLevel)
@@ -363,14 +365,14 @@ module Angular2 {
 
     PipeClass() {
       decorator = DataFlow::moduleMember("@angular/core", "Pipe").getACall() and
-      decorator = getADecorator()
+      decorator = this.getADecorator()
     }
 
     /** Gets the value of the `name` option passed to the `@Pipe` decorator. */
     string getPipeName() { decorator.getOptionArgument(0, "name").mayHaveStringValue(result) }
 
     /** Gets a reference to this pipe. */
-    DataFlow::Node getAPipeRef() { result.asExpr().(PipeRefExpr).getName() = getPipeName() }
+    DataFlow::Node getAPipeRef() { result.asExpr().(PipeRefExpr).getName() = this.getPipeName() }
   }
 
   private class ComponentSteps extends PreCallGraphStep {
@@ -413,25 +415,25 @@ module Angular2 {
    * attribute. There is no AST node for the implied for-of loop.
    */
   private class ForLoopAttribute extends HTML::Attribute {
-    ForLoopAttribute() { getName() = "*ngFor" }
+    ForLoopAttribute() { this.getName() = "*ngFor" }
 
     /** Gets a data-flow node holding the value being iterated over. */
     DataFlow::Node getIterationDomain() { result = getAttributeValueAsNode(this) }
 
     /** Gets the name of the variable holding the element of the current iteration. */
-    string getIteratorName() { result = getValue().regexpCapture(" *let +(\\w+).*", 1) }
+    string getIteratorName() { result = this.getValue().regexpCapture(" *let +(\\w+).*", 1) }
 
     /** Gets an HTML element in which the iterator variable is in scope. */
-    HTML::Element getAnElementInScope() { result.getParent*() = getElement() }
+    HTML::Element getAnElementInScope() { result.getParent*() = this.getElement() }
 
     /** Gets a reference to the iterator variable. */
     DataFlow::Node getAnIteratorAccess() {
       result =
-        getAnElementInScope()
+        this.getAnElementInScope()
             .getAnAttribute()
             .getCodeInAttribute()
             .(TemplateTopLevel)
-            .getAVariableUse(getIteratorName())
+            .getAVariableUse(this.getIteratorName())
     }
   }
 
@@ -485,11 +487,11 @@ module Angular2 {
    * A `<mat-table>` element.
    */
   class MatTableElement extends HTML::Element {
-    MatTableElement() { getName() = "mat-table" }
+    MatTableElement() { this.getName() = "mat-table" }
 
     /** Gets the data flow node corresponding to the `[dataSource]` attribute. */
     DataFlow::Node getDataSourceNode() {
-      result = getAttributeValueAsNode(getAttributeByName("[dataSource]"))
+      result = getAttributeValueAsNode(this.getAttributeByName("[dataSource]"))
     }
 
     /**
@@ -506,7 +508,7 @@ module Angular2 {
     DataFlow::Node getARowRef() {
       exists(string rowBinding |
         result =
-          getATableCell(rowBinding)
+          this.getATableCell(rowBinding)
               .getChild*()
               .getAnAttribute()
               .getCodeInAttribute()
@@ -546,5 +548,80 @@ module Angular2 {
         succ = invoke
       )
     }
+  }
+
+  private class DomValueSources extends DOM::DomValueSource::Range {
+    DomValueSources() {
+      this = API::Node::ofType("@angular/core", "ElementRef").getMember("nativeElement").asSource()
+    }
+  }
+
+  /**
+   * A DOM attribute write, using the AngularJS Renderer2 API: a call to `Renderer2.setProperty`.
+   */
+  class AngularRenderer2AttributeDefinition extends DOM::AttributeDefinition {
+    DataFlow::Node propertyNode;
+    DataFlow::Node valueNode;
+    DataFlow::Node elementNode;
+
+    AngularRenderer2AttributeDefinition() {
+      exists(API::CallNode setProperty |
+        setProperty =
+          API::moduleImport("@angular/core")
+              .getMember("Renderer2")
+              .getInstance()
+              .getMember("setProperty")
+              .getACall() and
+        elementNode = setProperty.getArgument(0) and
+        propertyNode = setProperty.getArgument(1) and
+        valueNode = setProperty.getArgument(2) and
+        this = setProperty.asExpr()
+      )
+    }
+
+    override string getName() { result = propertyNode.getStringValue() }
+
+    /**
+     * Get the `DataFlow::Node` that is affected by this Attribute Definition.
+     *
+     *  Defined instead of defining `getElement()`, which requires returning a DOM element definition, `ElementDefinition`.
+     */
+    DataFlow::Node getElementNode() { result = elementNode }
+
+    override DataFlow::Node getValueNode() { result = valueNode }
+  }
+
+  /**
+   * A source of DOM events originating from the `$event` variable in an event handler installed in an Angular template.
+   */
+  private class DomEventSources extends DOM::DomEventSource::Range {
+    DomEventSources() {
+      exists(HTML::Element elm, string attributeName |
+        elm = any(ComponentClass cls).getATemplateElement() and
+        // Ignore instantiations of known element (mainly focus on native DOM elements)
+        not elm = any(ComponentClass cls).getATemplateInstantiation() and
+        not elm.getName().matches("ng-%") and
+        this =
+          elm.getAttributeByName(attributeName)
+              .getCodeInAttribute()
+              .(TemplateTopLevel)
+              .getAVariableUse("$event") and
+        attributeName.matches("(%)") and // event handler attribute
+        not attributeName.matches("(ng%)") // exclude NG events which aren't necessarily DOM events
+      )
+    }
+  }
+
+  private class InputFieldAsViewComponentInput extends ViewComponentInput {
+    InputFieldAsViewComponentInput() {
+      this =
+        API::moduleImport("@angular/core")
+            .getMember("Input")
+            .getReturn()
+            .getADecoratedMember()
+            .asSource()
+    }
+
+    override string getSourceType() { result = "Angular component input field" }
   }
 }

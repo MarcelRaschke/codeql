@@ -2,7 +2,7 @@ import javascript
 import semmle.javascript.dataflow.internal.FlowSteps as FlowSteps
 
 query predicate argumentPassing(DataFlow::Node invk, DataFlow::Node arg, DataFlow::SourceNode parm) {
-  exists(Function f | FlowSteps::argumentPassing(invk, arg, f, parm))
+  FlowSteps::argumentPassing(invk, arg, _, parm)
 }
 
 query predicate basicBlock(DataFlow::Node node, BasicBlock bb) { node.getBasicBlock() = bb }
@@ -23,7 +23,10 @@ query predicate incomplete(DataFlow::Node dfn, DataFlow::Incompleteness cause) {
   dfn.isIncomplete(cause)
 }
 
-query predicate noBasicBlock(DataFlow::Node node) { not exists(node.getBasicBlock()) }
+query predicate noBasicBlock(DataFlow::Node node) {
+  (node instanceof DataFlow::ValueNode or node instanceof DataFlow::SsaDefinitionNode) and
+  not exists(node.getBasicBlock())
+}
 
 query predicate parameters(DataFlow::ParameterNode param) { any() }
 

@@ -5,12 +5,14 @@
  * @problem.severity warning
  * @id cs/dataset-serialization/defining-dataset-related-type
  * @tags security
+ *       experimental
  */
 
 import csharp
-import DataSetSerialization
+deprecated import DataSetSerialization
 
-from DataSetOrTableRelatedClass dstc
-where dstc.fromSource()
-select dstc,
-  "Defining a class that inherits or has a property derived from the obsolete DataSet or DataTable types. Please visit https://go.microsoft.com/fwlink/?linkid=2132227 for details."
+deprecated query predicate problems(DataSetOrTableRelatedClass dstc, string message) {
+  dstc.fromSource() and
+  message =
+    "Defining a class that inherits or has a property derived from the obsolete DataSet or DataTable types. Please visit https://go.microsoft.com/fwlink/?linkid=2132227 for details."
+}

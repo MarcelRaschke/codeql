@@ -14,7 +14,8 @@ import semmle.code.cpp.models.interfaces.FlowSource
  * The standard functions `fgets` and `fgetws`.
  */
 private class FgetsFunction extends DataFlowFunction, TaintFunction, ArrayFunction, AliasFunction,
-  SideEffectFunction, RemoteFlowSourceFunction {
+  SideEffectFunction, RemoteFlowSourceFunction
+{
   FgetsFunction() {
     // fgets(str, num, stream)
     // fgetws(wstr, num, stream)
@@ -25,6 +26,8 @@ private class FgetsFunction extends DataFlowFunction, TaintFunction, ArrayFuncti
     input.isParameter(0) and
     output.isReturnValue()
   }
+
+  override predicate isPartialWrite(FunctionOutput output) { output.isParameterDeref(2) }
 
   override predicate hasTaintFlow(FunctionInput input, FunctionOutput output) {
     input.isParameter(2) and
@@ -48,10 +51,10 @@ private class FgetsFunction extends DataFlowFunction, TaintFunction, ArrayFuncti
   }
 
   override predicate hasRemoteFlowSource(FunctionOutput output, string description) {
-    output.isParameterDeref(0) and
-    description = "string read by " + this.getName()
-    or
-    output.isReturnValue() and
+    (
+      output.isParameterDeref(0) or
+      output.isReturnValueDeref()
+    ) and
     description = "string read by " + this.getName()
   }
 
@@ -69,7 +72,8 @@ private class FgetsFunction extends DataFlowFunction, TaintFunction, ArrayFuncti
  * The standard functions `gets`.
  */
 private class GetsFunction extends DataFlowFunction, ArrayFunction, AliasFunction,
-  SideEffectFunction, LocalFlowSourceFunction {
+  SideEffectFunction, LocalFlowSourceFunction
+{
   GetsFunction() {
     // gets(str)
     this.hasGlobalOrStdOrBslName("gets")
@@ -97,14 +101,32 @@ private class GetsFunction extends DataFlowFunction, ArrayFunction, AliasFunctio
   }
 
   override predicate hasLocalFlowSource(FunctionOutput output, string description) {
-    output.isParameterDeref(0) and
-    description = "string read by " + this.getName()
-    or
-    output.isReturnValue() and
+    (
+      output.isParameterDeref(0) or
+      output.isReturnValueDeref()
+    ) and
     description = "string read by " + this.getName()
   }
 
   override predicate hasArrayWithUnknownSize(int bufParam) { bufParam = 0 }
 
   override predicate hasArrayOutput(int bufParam) { bufParam = 0 }
+}
+
+/**
+ * A model for `getc` and similar functions that are flow sources.
+ */
+private class GetcSource extends SourceModelCsv {
+  override predicate row(string row) {
+    row =
+      [
+        ";;false;getc;;;ReturnValue;remote", ";;false;getwc;;;ReturnValue;remote",
+        ";;false;_getc_nolock;;;ReturnValue;remote", ";;false;_getwc_nolock;;;ReturnValue;remote",
+        ";;false;getch;;;ReturnValue;local", ";;false;_getch;;;ReturnValue;local",
+        ";;false;_getwch;;;ReturnValue;local", ";;false;_getch_nolock;;;ReturnValue;local",
+        ";;false;_getwch_nolock;;;ReturnValue;local", ";;false;getchar;;;ReturnValue;local",
+        ";;false;getwchar;;;ReturnValue;local", ";;false;_getchar_nolock;;;ReturnValue;local",
+        ";;false;_getwchar_nolock;;;ReturnValue;local",
+      ]
+  }
 }

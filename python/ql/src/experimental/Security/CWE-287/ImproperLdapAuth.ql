@@ -5,6 +5,7 @@
  * @problem.severity warning
  * @id py/improper-ldap-auth
  * @tags security
+ *       experimental
  *       external/cwe/cwe-287
  */
 
@@ -19,7 +20,7 @@ predicate authenticatesImproperly(LdapBind ldapBind) {
     not exists(ldapBind.getPassword())
   )
   or
-  exists(StrConst emptyString |
+  exists(StringLiteral emptyString |
     emptyString.getText() = "" and
     DataFlow::localFlow(DataFlow::exprNode(emptyString), ldapBind.getPassword())
   )

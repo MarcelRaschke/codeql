@@ -214,7 +214,13 @@ module ServerWebSocket {
   class ServerSocket extends EventEmitter::Range, DataFlow::SourceNode {
     LibraryName library;
 
-    ServerSocket() { this = getAConnectionCall(library).getCallback(1).getParameter(0) }
+    ServerSocket() {
+      this = getAConnectionCall(library).getCallback(1).getParameter(0)
+      or
+      // support for the express-ws library: https://www.npmjs.com/package/express-ws
+      library = ws() and
+      this = Express::appCreation().getAMemberCall("ws").getABoundCallbackParameter(1, 0)
+    }
 
     /**
      * Gets the name of the library that created this server socket.
@@ -242,9 +248,6 @@ module ServerWebSocket {
 
     override Http::RouteHandler getRouteHandler() { result = handler }
   }
-
-  /** DEPRECATED: Alias for ServerHttpRequest */
-  deprecated class ServerHTTPRequest = ServerHttpRequest;
 
   /**
    * An access user-controlled HTTP request input in a request to a WebSocket server.

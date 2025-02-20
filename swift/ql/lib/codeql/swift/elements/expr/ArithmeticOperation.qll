@@ -1,7 +1,7 @@
 private import codeql.swift.elements.expr.Expr
 private import codeql.swift.elements.expr.BinaryExpr
 private import codeql.swift.elements.expr.PrefixUnaryExpr
-private import codeql.swift.elements.expr.DotSyntaxCallExpr
+private import codeql.swift.elements.expr.internal.DotSyntaxCallExpr
 
 /**
  * An arithmetic operation, such as:
@@ -9,7 +9,7 @@ private import codeql.swift.elements.expr.DotSyntaxCallExpr
  * a + b
  * ```
  */
-class ArithmeticOperation extends Expr {
+final class ArithmeticOperation extends Expr {
   ArithmeticOperation() {
     this instanceof BinaryArithmeticOperation or
     this instanceof UnaryArithmeticOperation
@@ -31,7 +31,7 @@ class ArithmeticOperation extends Expr {
  * a + b
  * ```
  */
-class BinaryArithmeticOperation extends BinaryExpr {
+final class BinaryArithmeticOperation extends BinaryExpr {
   BinaryArithmeticOperation() {
     this instanceof AddExpr or
     this instanceof SubExpr or
@@ -45,30 +45,33 @@ class BinaryArithmeticOperation extends BinaryExpr {
  * An add expression.
  * ```
  * a + b
+ * a &+ b
  * ```
  */
-class AddExpr extends BinaryExpr {
-  AddExpr() { this.getStaticTarget().getName() = "+(_:_:)" }
+final class AddExpr extends BinaryExpr {
+  AddExpr() { this.getStaticTarget().getName() = ["+(_:_:)", "&+(_:_:)"] }
 }
 
 /**
  * A subtract expression.
  * ```
  * a - b
+ * a &- b
  * ```
  */
-class SubExpr extends BinaryExpr {
-  SubExpr() { this.getStaticTarget().getName() = "-(_:_:)" }
+final class SubExpr extends BinaryExpr {
+  SubExpr() { this.getStaticTarget().getName() = ["-(_:_:)", "&-(_:_:)"] }
 }
 
 /**
  * A multiply expression.
  * ```
  * a * b
+ * a &* b
  * ```
  */
-class MulExpr extends BinaryExpr {
-  MulExpr() { this.getStaticTarget().getName() = "*(_:_:)" }
+final class MulExpr extends BinaryExpr {
+  MulExpr() { this.getStaticTarget().getName() = ["*(_:_:)", "&*(_:_:)"] }
 }
 
 /**
@@ -77,7 +80,7 @@ class MulExpr extends BinaryExpr {
  * a / b
  * ```
  */
-class DivExpr extends BinaryExpr {
+final class DivExpr extends BinaryExpr {
   DivExpr() { this.getStaticTarget().getName() = "/(_:_:)" }
 }
 
@@ -87,7 +90,7 @@ class DivExpr extends BinaryExpr {
  * a % b
  * ```
  */
-class RemExpr extends BinaryExpr {
+final class RemExpr extends BinaryExpr {
   RemExpr() { this.getStaticTarget().getName() = "%(_:_:)" }
 }
 
@@ -97,7 +100,12 @@ class RemExpr extends BinaryExpr {
  * -a
  * ```
  */
-class UnaryArithmeticOperation extends PrefixUnaryExpr instanceof UnaryMinusExpr { }
+final class UnaryArithmeticOperation extends PrefixUnaryExpr {
+  UnaryArithmeticOperation() {
+    this instanceof UnaryMinusExpr or
+    this instanceof UnaryPlusExpr
+  }
+}
 
 /**
  * A unary minus expression.
@@ -105,6 +113,16 @@ class UnaryArithmeticOperation extends PrefixUnaryExpr instanceof UnaryMinusExpr
  * -a
  * ```
  */
-class UnaryMinusExpr extends PrefixUnaryExpr {
+final class UnaryMinusExpr extends PrefixUnaryExpr {
   UnaryMinusExpr() { this.getStaticTarget().getName() = "-(_:)" }
+}
+
+/**
+ * A unary plus expression.
+ * ```
+ * +a
+ * ```
+ */
+final class UnaryPlusExpr extends PrefixUnaryExpr {
+  UnaryPlusExpr() { this.getStaticTarget().getName() = "+(_:)" }
 }

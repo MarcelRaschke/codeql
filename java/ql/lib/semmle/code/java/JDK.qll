@@ -38,6 +38,13 @@ class StringLengthMethod extends Method {
   StringLengthMethod() { this.hasName("length") and this.getDeclaringType() instanceof TypeString }
 }
 
+/** The `contains()` method of the class `java.lang.String`. */
+class StringContainsMethod extends Method {
+  StringContainsMethod() {
+    this.hasName("contains") and this.getDeclaringType() instanceof TypeString
+  }
+}
+
 /**
  * The methods on the class `java.lang.String` that are used to perform partial matches with a specified substring or char.
  */
@@ -177,6 +184,11 @@ class TypeObjectInputStream extends RefType {
   TypeObjectInputStream() { this.hasQualifiedName("java.io", "ObjectInputStream") }
 }
 
+/** The class `java.io.InputStream`. */
+class TypeInputStream extends RefType {
+  TypeInputStream() { this.hasQualifiedName("java.io", "InputStream") }
+}
+
 /** The class `java.nio.file.Paths`. */
 class TypePaths extends Class {
   TypePaths() { this.hasQualifiedName("java.nio.file", "Paths") }
@@ -198,39 +210,6 @@ class TypeFile extends Class {
 }
 
 // --- Standard methods ---
-/**
- * Any constructor of class `java.lang.ProcessBuilder`.
- */
-class ProcessBuilderConstructor extends Constructor, ExecCallable {
-  ProcessBuilderConstructor() { this.getDeclaringType() instanceof TypeProcessBuilder }
-
-  override int getAnExecutedArgument() { result = 0 }
-}
-
-/**
- * Any of the methods named `command` on class `java.lang.ProcessBuilder`.
- */
-class MethodProcessBuilderCommand extends Method, ExecCallable {
-  MethodProcessBuilderCommand() {
-    this.hasName("command") and
-    this.getDeclaringType() instanceof TypeProcessBuilder
-  }
-
-  override int getAnExecutedArgument() { result = 0 }
-}
-
-/**
- * Any method named `exec` on class `java.lang.Runtime`.
- */
-class MethodRuntimeExec extends Method, ExecCallable {
-  MethodRuntimeExec() {
-    this.hasName("exec") and
-    this.getDeclaringType() instanceof TypeRuntime
-  }
-
-  override int getAnExecutedArgument() { result = 0 }
-}
-
 /**
  * Any method named `getenv` on class `java.lang.System`.
  */
@@ -254,10 +233,10 @@ class MethodSystemGetProperty extends ValuePreservingMethod {
 }
 
 /**
- * An access to a method named `getProperty` on class `java.lang.System`.
+ * A call to a method named `getProperty` on class `java.lang.System`.
  */
-class MethodAccessSystemGetProperty extends MethodAccess {
-  MethodAccessSystemGetProperty() { this.getMethod() instanceof MethodSystemGetProperty }
+class MethodCallSystemGetProperty extends MethodCall {
+  MethodCallSystemGetProperty() { this.getMethod() instanceof MethodSystemGetProperty }
 
   /**
    * Holds if this call has a compile-time constant first argument with the value `propertyName`.

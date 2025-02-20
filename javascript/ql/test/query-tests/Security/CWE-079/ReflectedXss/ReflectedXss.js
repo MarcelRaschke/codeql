@@ -31,7 +31,7 @@ app.get('/user/:id', function(req, res) {
     ['Name', 'Content'],
     ['body', req.body]
   ]);
-  res.send(mytable); // NOT OK
+  res.send(mytable); // NOT OK - FIXME: only works in OLD dataflow, add implicit reads before library-contributed taint steps
 });
 
 var showdown  = require('showdown');
@@ -109,3 +109,17 @@ hapi.route({
     handler: function (request){
         return request.query.p; // NOT OK
     }});
+
+app.get("invalid/keys/:id", async (req, res) => {
+    const { keys: queryKeys } = req.query;
+    const paramKeys = req.params;
+    const keys = queryKeys || paramKeys?.keys;
+
+    const keyArray = typeof keys === 'string' ? [keys] : keys;
+    const invalidKeys = keyArray.filter(key => !whitelist.includes(key));
+
+    if (invalidKeys.length) {
+        res.status(400).send(`${invalidKeys.join(', ')} not in whitelist`);
+        return;
+    }
+});

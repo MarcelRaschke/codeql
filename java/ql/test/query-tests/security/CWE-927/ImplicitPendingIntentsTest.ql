@@ -1,20 +1,18 @@
 import java
 import semmle.code.java.security.ImplicitPendingIntentsQuery
-import TestUtilities.InlineExpectationsTest
+import utils.test.InlineExpectationsTest
 
-class ImplicitPendingIntentsTest extends InlineExpectationsTest {
-  ImplicitPendingIntentsTest() { this = "ImplicitPendingIntentsTest" }
+module ImplicitPendingIntentsTest implements TestSig {
+  string getARelevantTag() { result = "hasImplicitPendingIntent" }
 
-  override string getARelevantTag() { result = ["hasImplicitPendingIntent"] }
-
-  override predicate hasActualResult(Location location, string element, string tag, string value) {
+  predicate hasActualResult(Location location, string element, string tag, string value) {
     tag = "hasImplicitPendingIntent" and
-    exists(DataFlow::Node src, DataFlow::Node sink |
-      any(ImplicitPendingIntentStartConf c).hasFlow(src, sink)
-    |
+    exists(DataFlow::Node sink | ImplicitPendingIntentStartFlow::flowTo(sink) |
       sink.getLocation() = location and
       element = sink.toString() and
       value = ""
     )
   }
 }
+
+import MakeTest<ImplicitPendingIntentsTest>

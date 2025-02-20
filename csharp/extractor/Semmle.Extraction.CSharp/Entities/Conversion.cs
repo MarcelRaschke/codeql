@@ -1,7 +1,7 @@
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Semmle.Extraction.CSharp.Populators;
-using System.Linq;
 
 namespace Semmle.Extraction.CSharp.Entities
 {
@@ -9,6 +9,8 @@ namespace Semmle.Extraction.CSharp.Entities
     {
         private Conversion(Context cx, IMethodSymbol init)
             : base(cx, init) { }
+
+        protected override MethodKind ExplicitlyImplementsKind => MethodKind.Conversion;
 
         public static new Conversion Create(Context cx, IMethodSymbol symbol) =>
             ConversionFactory.Instance.CreateEntityFromSymbol(cx, symbol);
@@ -22,7 +24,7 @@ namespace Semmle.Extraction.CSharp.Entities
                     .OfType<ConversionOperatorDeclarationSyntax>()
                     .Select(s => s.FixedLocation())
                     .Concat(Symbol.Locations)
-                    .FirstOrDefault();
+                    .BestOrDefault();
             }
         }
 

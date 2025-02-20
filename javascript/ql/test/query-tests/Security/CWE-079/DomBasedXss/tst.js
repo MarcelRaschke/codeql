@@ -313,7 +313,7 @@ function basicExceptions() {
 }
 
 function handlebarsSafeString() {
-	return new Handlebars.SafeString(location); // NOT OK!	
+	return new Handlebars.SafeString(location); // NOT OK!
 }
 
 function test2() {
@@ -355,15 +355,15 @@ function thisNodes() {
 	    var target = document.location.search
 	    this.html(target); // NOT OK. (this is a jQuery object)
 		this.innerHTML = target // OK. (this is a jQuery object)
-	
+
 		this.each(function (i, e) {
 			this.innerHTML = target; // NOT OK. (this is a DOM-node);
 			this.html(target); // OK. (this is a DOM-node);
-			
+
 			e.innerHTML = target; // NOT OK.
 		});
 	}
-	$.fn[pluginName] = myPlugin; 
+	$.fn[pluginName] = myPlugin;
 
 }
 
@@ -373,14 +373,14 @@ function test() {
   // NOT OK
   $('myId').html(target)
 
-  // OK
+  // OK - but only safe because contents are URI-encoded
   $('myid').html(document.location.href.split("?")[0]);
 }
 
 function test() {
   var target = document.location.search
 
-  
+
   $('myId').html(target); // NOT OK
 
   $('myId').html(target.taint); // NOT OK
@@ -401,7 +401,7 @@ function test() {
   if (random()) {return;}
   $('myId').html(target.taint6); // OK
 
-  
+
   if (random()) {target.taint7 = "safe";}
   $('myId').html(target.taint7); // NOT OK
 
@@ -489,4 +489,24 @@ function urlStuff() {
   window.open(location.hash.substr(1)); // OK - any JavaScript is executed in another context
 
   navigation.navigate(location.hash.substr(1)); // NOT OK
+
+  const myHistory = require('history').createBrowserHistory();
+  myHistory.push(location.hash.substr(1)); // NOT OK
+}
+
+function Foo() {
+  this.foo = document;
+  var obj = {
+    bar: function() {
+      this.foo.body.innerHTML = decodeURI(window.location.hash); // NOT OK
+    }
+  };
+  Object.assign(this, obj);
+}
+
+function nonGlobalSanitizer() {
+  var target = document.location.search
+  $("#foo").html(target.replace(new RegExp("<|>"), '')); // NOT OK
+  $("#foo").html(target.replace(new RegExp("<|>", unknownFlags()), '')); // OK -- most likely good. We don't know what the flags are.
+  $("#foo").html(target.replace(new RegExp("<|>", "g"), '')); // OK
 }

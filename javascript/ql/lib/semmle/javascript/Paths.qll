@@ -4,6 +4,7 @@
  */
 
 import javascript
+private import semmle.javascript.dataflow.internal.DataFlowNode
 
 /**
  * Internal representation of paths as lists of components.
@@ -380,6 +381,25 @@ private class PathExprString extends PathString {
   }
 }
 
+pragma[nomagic]
+private EarlyStageNode getAPathExprAlias(PathExpr expr) {
+  DataFlow::Impl::earlyStageImmediateFlowStep(TValueNode(expr), result)
+  or
+  DataFlow::Impl::earlyStageImmediateFlowStep(getAPathExprAlias(expr), result)
+}
+
+private class PathExprFromAlias extends PathExpr {
+  private PathExpr other;
+
+  PathExprFromAlias() { TValueNode(this) = getAPathExprAlias(other) }
+
+  override string getValue() { result = other.getValue() }
+
+  override Folder getAdditionalSearchRoot(int priority) {
+    result = other.getAdditionalSearchRoot(priority)
+  }
+}
+
 /**
  * A path expression of the form `p + q`, where both `p` and `q`
  * are path expressions.
@@ -413,13 +433,18 @@ private class ConcatPath extends PathExpr {
  * Examples include arguments to the CommonJS `require` function or AMD dependency arguments.
  */
 abstract class PathExprCandidate extends Expr {
+  pragma[nomagic]
+  private Expr getAPart1() { result = this or result = this.getAPart().getAChildExpr() }
+
+  private EarlyStageNode getAnAliasedPart1() {
+    result = TValueNode(this.getAPart1())
+    or
+    DataFlow::Impl::earlyStageImmediateFlowStep(result, this.getAnAliasedPart1())
+  }
+
   /**
-   * Gets an expression that is nested inside this expression.
-   *
-   * Equivalent to `getAChildExpr*()`, but useful to enforce a better join order (in spite of
-   * what the optimizer thinks, there are generally far fewer `PathExprCandidate`s than
-   * `ConstantString`s).
+   * Gets an expression that is depended on by an expression nested inside this expression.
    */
   pragma[nomagic]
-  Expr getAPart() { result = this or result = this.getAPart().getAChildExpr() }
+  Expr getAPart() { TValueNode(result) = this.getAnAliasedPart1() }
 }

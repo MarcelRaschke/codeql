@@ -5,8 +5,6 @@
 import Member
 import Stmt
 import Type
-private import cil
-private import dotnet
 private import semmle.code.csharp.ExprOrStmtParent
 private import TypeRef
 
@@ -15,7 +13,8 @@ private import TypeRef
  * (`Property`), or an indexer (`Indexer`).
  */
 class DeclarationWithAccessors extends AssignableMember, Virtualizable, Attributable,
-  @declaration_with_accessors {
+  @declaration_with_accessors
+{
   /** Gets an accessor of this declaration. */
   Accessor getAnAccessor() { result.getDeclaration() = this }
 
@@ -49,7 +48,8 @@ class DeclarationWithAccessors extends AssignableMember, Virtualizable, Attribut
  * property (`Property`) or an indexer (`Indexer`).
  */
 class DeclarationWithGetSetAccessors extends DeclarationWithAccessors, TopLevelExprParent,
-  @assignable_with_accessors {
+  @assignable_with_accessors
+{
   /** Gets the `get` accessor of this declaration, if any. */
   Getter getGetter() { result = this.getAnAccessor() }
 
@@ -111,14 +111,26 @@ class DeclarationWithGetSetAccessors extends DeclarationWithAccessors, TopLevelE
  * }
  * ```
  */
-class Property extends DotNet::Property, DeclarationWithGetSetAccessors, @property {
+class Property extends DeclarationWithGetSetAccessors, @property {
   override string getName() { properties(this, result, _, _, _) }
 
   override string getUndecoratedName() { properties(this, result, _, _, _) }
 
   override ValueOrRefType getDeclaringType() { properties(this, _, result, _, _) }
 
-  override Type getType() { properties(this, _, _, getTypeRef(result), _) }
+  override Type getType() {
+    properties(this, _, _, result, _)
+    or
+    not properties(this, _, _, any(Type t), _) and
+    properties(this, _, _, getTypeRef(result), _)
+  }
+
+  private predicate isAutoPartial() {
+    this.fromSource() and
+    not this.isExtern() and
+    not this.isAbstract() and
+    not this.getAnAccessor().hasBody()
+  }
 
   /**
    * Holds if this property is automatically implemented. For example, `P1`
@@ -140,11 +152,22 @@ class Property extends DotNet::Property, DeclarationWithGetSetAccessors, @proper
    * code.
    */
   predicate isAutoImplemented() {
-    this.fromSource() and
-    this.isReadWrite() and
-    not this.isExtern() and
-    not this.isAbstract() and
-    not this.getAnAccessor().hasBody()
+    this.isAutoPartial() and
+    this.isReadWrite()
+  }
+
+  /**
+   * Holds if this property is automatically implemented and read-only. For
+   * example, `P1` on line 2 is automatically implemented and read-only
+   * ```csharp
+   * class C {
+   *   public int P1 { get; }
+   * }
+   * ```
+   */
+  predicate isAutoImplementedReadOnly() {
+    this.isAutoPartial() and
+    this.isReadOnly()
   }
 
   override Property getUnboundDeclaration() { properties(this, _, _, _, result) }
@@ -258,7 +281,12 @@ class Indexer extends DeclarationWithGetSetAccessors, Parameterizable, @indexer 
 
   override ValueOrRefType getDeclaringType() { indexers(this, _, result, _, _) }
 
-  override Type getType() { indexers(this, _, _, getTypeRef(result), _) }
+  override Type getType() {
+    indexers(this, _, _, result, _)
+    or
+    not indexers(this, _, _, any(Type t), _) and
+    indexers(this, _, _, getTypeRef(result), _)
+  }
 
   override IndexerAccess getAnAccess() { result.getTarget() = this }
 
@@ -528,8 +556,6 @@ class TrivialProperty extends Property {
     this.isAutoImplemented()
     or
     this.getGetter().trivialGetterField() = this.getSetter().trivialSetterField()
-    or
-    exists(CIL::TrivialProperty prop | this.matchesHandle(prop))
   }
 }
 

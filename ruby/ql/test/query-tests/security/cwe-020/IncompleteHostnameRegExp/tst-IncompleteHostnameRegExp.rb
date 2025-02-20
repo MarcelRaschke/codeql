@@ -27,7 +27,7 @@ def foo
 
 	convert1({ hostname: 'test.example.com$' }); # NOT OK
 
-	domains = [ { hostname: 'test.example.com$' } ];  # NOT OK
+	domains = [ { hostname: 'test.example.com$' } ];  # NOT OK - but not flagged due to limitations of TypeTracking.
 
 
 
@@ -65,3 +65,17 @@ end
 def convert2(domain)
 	return Regexp.new(domain[:hostname]);
 end
+
+class A
+	def self.match?(x) = true
+end
+
+A.match?("^http://test.example.com") # OK
+
+class B
+	def self.match?(x)
+		some_string.match?(x)
+	end
+end
+
+B.match?("^http://test.example.com") # NOT OK

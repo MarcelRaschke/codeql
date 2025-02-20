@@ -121,10 +121,17 @@ class OverridableCallable extends Callable, Overridable {
     result = c.getDeclaringType()
   }
 
+  pragma[nomagic]
   private predicate isDeclaringSubType(ValueOrRefType t) {
     t = this.getDeclaringType()
     or
     exists(ValueOrRefType mid | this.isDeclaringSubType(mid) | t = mid.getASubType())
+  }
+
+  pragma[nomagic]
+  private predicate isDeclaringSubType(ValueOrRefType t, ValueOrRefType sub) {
+    this.isDeclaringSubType(t) and
+    t = sub.getABaseType()
   }
 
   pragma[noinline]
@@ -155,18 +162,9 @@ class OverridableCallable extends Callable, Overridable {
   Callable getAnOverrider(ValueOrRefType t) {
     result = this.getAnOverrider0(t)
     or
-    exists(ValueOrRefType mid | result = this.getAnOverrider(mid) |
-      t = mid.getABaseType() and
-      this.isDeclaringSubType(t)
-    )
+    exists(ValueOrRefType mid | result = this.getAnOverrider(mid) | this.isDeclaringSubType(t, mid))
   }
 }
-
-/** An overridable method. */
-deprecated class OverridableMethod extends Method, OverridableCallable { }
-
-/** An overridable accessor. */
-deprecated class OverridableAccessor extends Accessor, OverridableCallable { }
 
 /** An unbound type. */
 class UnboundDeclarationType extends Type {

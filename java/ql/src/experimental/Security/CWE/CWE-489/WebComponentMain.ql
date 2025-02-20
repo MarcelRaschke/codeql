@@ -6,12 +6,13 @@
  * @precision medium
  * @id java/main-method-in-web-components
  * @tags security
+ *       experimental
  *       external/cwe/cwe-489
  */
 
 import java
 import semmle.code.java.frameworks.Servlets
-import TestLib
+deprecated import TestLib
 
 /** The java type `javax.servlet.Filter`. */
 class ServletFilterClass extends Class {
@@ -31,7 +32,7 @@ class ServletListenerClass extends Class {
 }
 
 /** The `main` method in `Servlet` and `Action` of the Spring and Struts framework. */
-class WebComponentMainMethod extends Method {
+deprecated class WebComponentMainMethod extends Method {
   WebComponentMainMethod() {
     (
       this.getDeclaringType() instanceof ServletClass or
@@ -53,5 +54,6 @@ class WebComponentMainMethod extends Method {
   }
 }
 
-from WebComponentMainMethod sm
-select sm, "Web application has a main method."
+deprecated query predicate problems(WebComponentMainMethod sm, string message) {
+  exists(sm) and message = "Web application has a main method."
+}

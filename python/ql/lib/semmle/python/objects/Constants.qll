@@ -35,10 +35,8 @@ abstract class ConstantObjectInternal extends ObjectInternal {
   pragma[noinline]
   override predicate attribute(string name, ObjectInternal value, CfgOrigin origin) {
     PointsToInternal::attributeRequired(pragma[only_bind_into](this), pragma[only_bind_into](name)) and
-    exists(ObjectInternal cls_attr, CfgOrigin attr_orig |
-      this.getClass()
-          .(ClassObjectInternal)
-          .lookup(pragma[only_bind_into](name), cls_attr, attr_orig) and
+    exists(ObjectInternal cls_attr |
+      this.getClass().(ClassObjectInternal).lookup(pragma[only_bind_into](name), cls_attr, _) and
       cls_attr.isDescriptor() = true and
       cls_attr.descriptorGetInstance(this, value, origin)
     )
@@ -241,8 +239,8 @@ class UnicodeObjectInternal extends ConstantObjectInternal, TUnicode {
 
   override predicate introducedAt(ControlFlowNode node, PointsToContext context) {
     context.appliesTo(node) and
-    node.getNode().(StrConst).getText() = this.strValue() and
-    node.getNode().(StrConst).isUnicode()
+    node.getNode().(StringLiteral).getText() = this.strValue() and
+    node.getNode().(StringLiteral).isUnicode()
   }
 
   override ObjectInternal getClass() { result = TBuiltinClassObject(Builtin::special("unicode")) }
@@ -274,8 +272,8 @@ class BytesObjectInternal extends ConstantObjectInternal, TBytes {
 
   override predicate introducedAt(ControlFlowNode node, PointsToContext context) {
     context.appliesTo(node) and
-    node.getNode().(StrConst).getText() = this.strValue() and
-    not node.getNode().(StrConst).isUnicode()
+    node.getNode().(StringLiteral).getText() = this.strValue() and
+    not node.getNode().(StringLiteral).isUnicode()
   }
 
   override ObjectInternal getClass() { result = TBuiltinClassObject(Builtin::special("bytes")) }

@@ -55,6 +55,8 @@ class AstNode extends @node, Locatable {
     kind = "commentgroup" and result = this.(File).getCommentGroup(i)
     or
     kind = "comment" and result = this.(CommentGroup).getComment(i)
+    or
+    kind = "typeparamdecl" and result = this.(TypeParamDeclParent).getTypeParameterDecl(i)
   }
 
   /**
@@ -79,6 +81,7 @@ class AstNode extends @node, Locatable {
   }
 
   /** Gets the innermost function definition to which this AST node belongs, if any. */
+  pragma[nomagic]
   FuncDef getEnclosingFunction() { result = this.getParent().parentInSameFunction*() }
 
   /**
@@ -194,24 +197,27 @@ class DeclParent extends @declparent, AstNode {
 }
 
 /**
- * An AST node whose children include fields.
+ * An AST node whose children include field declarations.
+ *
+ * A field declaration can be in a struct, a function (for parameter or result
+ * variables), or an interface (in which case it is a method or embedding spec).
  */
 class FieldParent extends @fieldparent, AstNode {
   /**
-   * Gets the `i`th field of this node.
+   * Gets the `i`th field declaration of this node.
    *
-   * Note that the precise indices of fields are considered an implementation detail
-   * and are subject to change without notice.
+   * Note that the precise indices of field declarations are considered an
+   * implementation detail and are subject to change without notice.
    */
   FieldBase getField(int i) { fields(result, this, i) }
 
   /**
-   * Gets a child field of this node in the AST.
+   * Gets a child field declaration of this node in the AST.
    */
   FieldBase getAField() { result = this.getField(_) }
 
   /**
-   * Gets the number of child fields of this node.
+   * Gets the number of child field declarations of this node.
    */
   int getNumFields() { result = count(this.getAField()) }
 }

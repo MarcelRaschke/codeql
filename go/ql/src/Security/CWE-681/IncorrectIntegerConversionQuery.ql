@@ -10,19 +10,20 @@
  * @tags security
  *       external/cwe/cwe-190
  *       external/cwe/cwe-681
- * @precision very-high
+ * @precision high
  */
 
 import go
-import DataFlow::PathGraph
 import semmle.go.security.IncorrectIntegerConversionLib
+import Flow::PathGraph
 
 from
-  DataFlow::PathNode source, DataFlow::PathNode sink, ConversionWithoutBoundsCheckConfig cfg,
-  DataFlow::CallNode call
-where cfg.hasFlowPath(source, sink) and call.getResult(0) = source.getNode()
-select sink.getNode(), source, sink,
-  "Incorrect conversion of " +
-    describeBitSize(cfg.getSourceBitSize(), getIntTypeBitSize(source.getNode().getFile())) +
-    " from $@ to a lower bit size type " + sink.getNode().getType().getUnderlyingType().getName() +
+  Flow::PathNode source, Flow::PathNode sink, DataFlow::CallNode call, DataFlow::Node sinkConverted
+where
+  Flow::flowPath(source, sink) and
+  call.getResult(0) = source.getNode() and
+  sinkConverted = sink.getNode().getASuccessor()
+select sinkConverted, source, sink,
+  "Incorrect conversion of " + describeBitSize2(source.getNode()) +
+    " from $@ to a lower bit size type " + sinkConverted.getType().getUnderlyingType().getName() +
     " without an upper bound check.", source, call.getTarget().getQualifiedName()

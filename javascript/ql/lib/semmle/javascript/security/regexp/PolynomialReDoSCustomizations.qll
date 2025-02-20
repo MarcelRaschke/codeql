@@ -47,6 +47,27 @@ module PolynomialReDoS {
   abstract class Sanitizer extends DataFlow::Node { }
 
   /**
+   * A barrier guard for polynomial regular expression denial-of-service attacks.
+   */
+  abstract class BarrierGuard extends DataFlow::Node {
+    /**
+     * Holds if this node acts as a barrier for data flow, blocking further flow from `e` if `this` evaluates to `outcome`.
+     */
+    predicate blocksExpr(boolean outcome, Expr e) { none() }
+
+    /** DEPRECATED. Use `blocksExpr` instead. */
+    deprecated predicate sanitizes(boolean outcome, Expr e) { this.blocksExpr(outcome, e) }
+  }
+
+  /** A subclass of `BarrierGuard` that is used for backward compatibility with the old data flow library. */
+  deprecated final private class BarrierGuardLegacy extends TaintTracking::SanitizerGuardNode instanceof BarrierGuard
+  {
+    override predicate sanitizes(boolean outcome, Expr e) {
+      BarrierGuard.super.sanitizes(outcome, e)
+    }
+  }
+
+  /**
    * A remote input to a server, seen as a source for polynomial
    * regular expression denial-of-service vulnerabilities.
    */
@@ -110,12 +131,15 @@ module PolynomialReDoS {
     exists(RegExpAlt alt | term = alt |
       forall(RegExpTerm choice | choice = alt.getAlternative() | isCharClassLike(choice))
     )
+    or
+    // an infinite repetition of a char class, is effectively the same, because the regex is global.
+    exists(InfiniteRepetitionQuantifier quan | term = quan | isCharClassLike(quan.getChild(0)))
   }
 
   /**
    * An check on the length of a string, seen as a sanitizer guard.
    */
-  class LengthGuard extends TaintTracking::SanitizerGuardNode, DataFlow::ValueNode {
+  class LengthGuard extends BarrierGuard, DataFlow::ValueNode {
     DataFlow::Node input;
     boolean polarity;
 
@@ -130,7 +154,7 @@ module PolynomialReDoS {
       )
     }
 
-    override predicate sanitizes(boolean outcome, Expr e) {
+    override predicate blocksExpr(boolean outcome, Expr e) {
       outcome = polarity and
       e = input.asExpr()
     }

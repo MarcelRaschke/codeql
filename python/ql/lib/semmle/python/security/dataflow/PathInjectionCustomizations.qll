@@ -43,22 +43,46 @@ module PathInjection {
   abstract class Sanitizer extends DataFlow::Node { }
 
   /**
-   * DEPRECATED: Use `Sanitizer` instead.
-   *
-   * A sanitizer guard for "path injection" vulnerabilities.
+   * DEPRECATED: Use `ActiveThreatModelSource` from Concepts instead!
    */
-  abstract deprecated class SanitizerGuard extends DataFlow::BarrierGuard { }
+  deprecated class RemoteFlowSourceAsSource = ActiveThreatModelSourceAsSource;
 
   /**
-   * A source of remote user input, considered as a flow source.
+   * An active threat-model source, considered as a flow source.
    */
-  class RemoteFlowSourceAsSource extends Source, RemoteFlowSource { }
+  private class ActiveThreatModelSourceAsSource extends Source, ActiveThreatModelSource { }
 
   /**
    * A file system access, considered as a flow sink.
    */
   class FileSystemAccessAsSink extends Sink {
-    FileSystemAccessAsSink() { this = any(FileSystemAccess e).getAPathArgument() }
+    FileSystemAccessAsSink() {
+      this = any(FileSystemAccess e).getAPathArgument() and
+      // since implementation of Path.open in pathlib.py is like
+      // ```py
+      // def open(self, ...):
+      //     return io.open(self, ...)
+      // ```
+      // any time we would report flow to the `path_obj.open` sink, we can ALSO report
+      // the flow from the `self` parameter to the `io.open` sink -- obviously we
+      // don't want that.
+      //
+      // However, simply removing taint edges out of a sink is not a good enough solution,
+      // since we would only flag one of the `p.open` calls in the following example
+      // due to use-use flow
+      // ```py
+      // p.open()
+      // p.open()
+      // ```
+      //
+      // The same approach is used in the command injection query.
+      not exists(Module inStdlib |
+        inStdlib.getName() in ["pathlib", "os"] and
+        this.getScope().getEnclosingModule() = inStdlib and
+        // do allow this call if we're analyzing, say, pathlib.py as part of CPython though
+        not exists(inStdlib.getFile().getRelativePath())
+      )
+    }
   }
 
   private import semmle.python.frameworks.data.ModelsAsData
@@ -68,7 +92,10 @@ module PathInjection {
   }
 
   /**
-   * A comparison with a constant string, considered as a sanitizer-guard.
+   * A comparison with a constant, considered as a sanitizer-guard.
    */
-  class StringConstCompareAsSanitizerGuard extends Sanitizer, StringConstCompareBarrier { }
+  class ConstCompareAsSanitizerGuard extends Sanitizer, ConstCompareBarrier { }
+
+  /** DEPRECATED: Use ConstCompareAsSanitizerGuard instead. */
+  deprecated class StringConstCompareAsSanitizerGuard = ConstCompareAsSanitizerGuard;
 }

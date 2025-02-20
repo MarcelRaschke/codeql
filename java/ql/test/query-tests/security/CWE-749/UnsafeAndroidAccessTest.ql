@@ -1,20 +1,18 @@
 import java
 import semmle.code.java.security.UnsafeAndroidAccessQuery
-import TestUtilities.InlineExpectationsTest
+import utils.test.InlineExpectationsTest
 
-class UnsafeAndroidAccessTest extends InlineExpectationsTest {
-  UnsafeAndroidAccessTest() { this = "HasUnsafeAndroidAccess" }
+module UnsafeAndroidAccessTest implements TestSig {
+  string getARelevantTag() { result = "hasUnsafeAndroidAccess" }
 
-  override string getARelevantTag() { result = "hasUnsafeAndroidAccess" }
-
-  override predicate hasActualResult(Location location, string element, string tag, string value) {
+  predicate hasActualResult(Location location, string element, string tag, string value) {
     tag = "hasUnsafeAndroidAccess" and
-    exists(DataFlow::Node src, DataFlow::Node sink, FetchUntrustedResourceConfiguration conf |
-      conf.hasFlow(src, sink)
-    |
+    exists(DataFlow::Node sink | FetchUntrustedResourceFlow::flowTo(sink) |
       sink.getLocation() = location and
       element = sink.toString() and
       value = ""
     )
   }
 }
+
+import MakeTest<UnsafeAndroidAccessTest>

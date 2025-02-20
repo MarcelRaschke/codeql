@@ -120,7 +120,8 @@ module Electron {
      * except that values can be returned through the `event.returnValue` property.
      */
     class IpcSendRegistration extends EventRegistration::DefaultEventRegistration,
-      DataFlow::MethodCallNode {
+      DataFlow::MethodCallNode
+    {
       override Process emitter;
 
       IpcSendRegistration() { this = emitter.ref().getAMethodCall(EventEmitter::on()) }
@@ -131,9 +132,6 @@ module Electron {
 
       override IpcDispatch getAReturnDispatch() { result.getCalleeName() = "sendSync" }
     }
-
-    /** DEPRECATED: Alias for IpcSendRegistration */
-    deprecated class IPCSendRegistration = IpcSendRegistration;
 
     /**
      * A dispatch of an IPC event.
@@ -170,16 +168,13 @@ module Electron {
         result.getEmitter() instanceof RendererProcess
       }
     }
-
-    /** DEPRECATED: Alias for IpcDispatch */
-    deprecated class IPCDispatch = IpcDispatch;
   }
 
   /**
    * A Node.js-style HTTP or HTTPS request made using an Electron module.
    */
-  class ElectronClientRequest extends NodeJSLib::NodeJSClientRequest instanceof ElectronClientRequest::Range {
-  }
+  class ElectronClientRequest extends NodeJSLib::NodeJSClientRequest instanceof ElectronClientRequest::Range
+  { }
 
   module ElectronClientRequest {
     /**

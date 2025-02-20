@@ -39,31 +39,31 @@ class LockType extends RefType {
     result.hasName("isHeldByCurrentThread")
   }
 
-  MethodAccess getLockAccess() {
+  MethodCall getLockAccess() {
     result.getMethod() = this.getLockMethod() and
     // Not part of a Mockito verification call
-    not result instanceof MockitoVerifiedMethodAccess
+    not result instanceof MockitoVerifiedMethodCall
   }
 
-  MethodAccess getUnlockAccess() {
+  MethodCall getUnlockAccess() {
     result.getMethod() = this.getUnlockMethod() and
     // Not part of a Mockito verification call
-    not result instanceof MockitoVerifiedMethodAccess
+    not result instanceof MockitoVerifiedMethodCall
   }
 
-  MethodAccess getIsHeldByCurrentThreadAccess() {
+  MethodCall getIsHeldByCurrentThreadAccess() {
     result.getMethod() = this.getIsHeldByCurrentThreadMethod() and
     // Not part of a Mockito verification call
-    not result instanceof MockitoVerifiedMethodAccess
+    not result instanceof MockitoVerifiedMethodCall
   }
 }
 
 predicate lockBlock(LockType t, BasicBlock b, int locks) {
-  locks = strictcount(int i | b.getNode(i) = t.getLockAccess())
+  locks = strictcount(int i | b.getNode(i).asExpr() = t.getLockAccess())
 }
 
 predicate unlockBlock(LockType t, BasicBlock b, int unlocks) {
-  unlocks = strictcount(int i | b.getNode(i) = t.getUnlockAccess())
+  unlocks = strictcount(int i | b.getNode(i).asExpr() = t.getUnlockAccess())
 }
 
 /**
@@ -90,11 +90,11 @@ predicate failedLock(LockType t, BasicBlock lockblock, BasicBlock exblock) {
   exists(ControlFlowNode lock |
     lock = lockblock.getLastNode() and
     (
-      lock = t.getLockAccess()
+      lock.asExpr() = t.getLockAccess()
       or
       exists(SsaExplicitUpdate lockbool |
         // Using the value of `t.getLockAccess()` ensures that it is a `tryLock` call.
-        lock = lockbool.getAUse() and
+        lock.asExpr() = lockbool.getAUse() and
         lockbool.getDefiningExpr().(VariableAssign).getSource() = t.getLockAccess()
       )
     ) and
@@ -147,12 +147,12 @@ predicate blockIsLocked(LockType t, BasicBlock src, BasicBlock b, int locks) {
   )
 }
 
-from Callable c, LockType t, BasicBlock src, BasicBlock exit, MethodAccess lock
+from Callable c, LockType t, BasicBlock src, ExitBlock exit, MethodCall lock
 where
   // Restrict results to those methods that actually attempt to unlock.
   t.getUnlockAccess().getEnclosingCallable() = c and
   blockIsLocked(t, src, exit, _) and
-  exit.getLastNode() = c and
-  lock = src.getANode() and
+  exit.getEnclosingCallable() = c and
+  lock = src.getANode().asExpr() and
   lock = t.getLockAccess()
 select lock, "This lock might not be unlocked or might be locked more times than it is unlocked."

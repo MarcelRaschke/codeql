@@ -6,6 +6,7 @@
  * @problem.severity warning
  * @precision medium
  * @tags security
+ *       experimental
  *       external/cwe/cwe-675
  *       external/cwe/cwe-666
  */
@@ -24,7 +25,7 @@ class CallMayNotReturn extends FunctionCall {
     not exists(this.(ControlFlowNode).getASuccessor())
     or
     // call to another function that may not return
-    exists(CallMayNotReturn exit | getTarget() = exit.getEnclosingFunction())
+    exists(CallMayNotReturn exit | this.getTarget() = exit.getEnclosingFunction())
     or
     this.(ControlFlowNode).getASuccessor() instanceof ThrowExpr
   }
