@@ -1,8 +1,8 @@
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Semmle.Extraction.Kinds;
+using System.IO;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using System.IO;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Semmle.Extraction.Kinds;
 
 namespace Semmle.Extraction.CSharp.Entities.Expressions
 {
@@ -20,6 +20,8 @@ namespace Semmle.Extraction.CSharp.Entities.Expressions
             {
                 case SyntaxKind.DefaultLiteralExpression:
                     return ExprKind.DEFAULT;
+                case SyntaxKind.Utf8StringLiteralExpression:
+                    return ExprKind.UTF8_STRING_LITERAL;
                 case SyntaxKind.NullLiteralExpression:
                     info.SetType(null);  // Don't use converted type.
                     return ExprKind.NULL_LITERAL;
@@ -35,7 +37,7 @@ namespace Semmle.Extraction.CSharp.Entities.Expressions
             return GetExprKind(type, info.Node, info.Location, info.Context);
         }
 
-        private static ExprKind GetExprKind(ITypeSymbol? type, ExpressionSyntax? expr, Extraction.Entities.Location loc, Context context)
+        private static ExprKind GetExprKind(ITypeSymbol? type, ExpressionSyntax? expr, Location loc, Context context)
         {
             switch (type?.SpecialType)
             {
@@ -63,7 +65,7 @@ namespace Semmle.Extraction.CSharp.Entities.Expressions
                     return ExprKind.FLOAT_LITERAL;
 
                 case SpecialType.System_String:
-                    return ExprKind.STRING_LITERAL;
+                    return ExprKind.UTF16_STRING_LITERAL;
 
                 case SpecialType.System_UInt16:
                 case SpecialType.System_UInt32:
@@ -85,7 +87,7 @@ namespace Semmle.Extraction.CSharp.Entities.Expressions
         }
 
         public static Expression CreateGenerated(Context cx, IExpressionParentEntity parent, int childIndex, ITypeSymbol type, object? value,
-            Extraction.Entities.Location location)
+            Location location)
         {
             var kind = value is null ? ExprKind.NULL_LITERAL : GetExprKind(type, null, location, cx);
             var info = new ExpressionInfo(
@@ -95,13 +97,13 @@ namespace Semmle.Extraction.CSharp.Entities.Expressions
                 kind,
                 parent,
                 childIndex,
-                true,
+                isCompilerGenerated: true,
                 ValueAsString(value));
 
             return new Expression(info);
         }
 
-        public static Expression CreateGeneratedNullLiteral(Context cx, IExpressionParentEntity parent, int childIndex, Extraction.Entities.Location location)
+        public static Expression CreateGeneratedNullLiteral(Context cx, IExpressionParentEntity parent, int childIndex, Location location)
         {
             var info = new ExpressionInfo(
                 cx,
@@ -110,7 +112,7 @@ namespace Semmle.Extraction.CSharp.Entities.Expressions
                 ExprKind.NULL_LITERAL,
                 parent,
                 childIndex,
-                true,
+                isCompilerGenerated: true,
                 ValueAsString(null));
 
             return new Expression(info);

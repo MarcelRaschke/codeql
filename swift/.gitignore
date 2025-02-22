@@ -1,6 +1,3 @@
-# directory created by bazel run //swift:create-extractor-pack
-/extractor-pack
-
 # output files created by running tests
 *.o
 
@@ -11,5 +8,6 @@ compile_commands.json
 /.idea
 /cmake*
 
-# VSCode default build directory
+# VSCode default build directory and project directory
 /build
+/.vscode

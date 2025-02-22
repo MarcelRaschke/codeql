@@ -34,10 +34,15 @@ newtype TInstructionTag =
   CallTargetTag() or
   CallTag() or
   CallSideEffectTag() or
+  CallNoReturnTag() or
   AllocationSizeTag() or
   AllocationElementSizeTag() or
   AllocationExtentConvertTag() or
+  ValueConditionCompareTag() or
+  ValueConditionConstantTag() or
   ValueConditionConditionalBranchTag() or
+  ValueConditionConditionalConstantTag() or
+  ValueConditionConditionalCompareTag() or
   ConditionValueTrueTempAddressTag() or
   ConditionValueTrueConstantTag() or
   ConditionValueTrueStoreTag() or
@@ -48,6 +53,8 @@ newtype TInstructionTag =
   ConditionValueResultLoadTag() or
   BoolConversionConstantTag() or
   BoolConversionCompareTag() or
+  NotExprOperationTag() or
+  NotExprConstantTag() or
   ResultCopyTag() or
   LoadTag() or // Implicit load due to lvalue-to-rvalue conversion
   CatchTag() or
@@ -72,10 +79,27 @@ newtype TInstructionTag =
   AsmInputTag(int elementIndex) { exists(AsmStmt asm | exists(asm.getChild(elementIndex))) } or
   ThisAddressTag() or
   ThisLoadTag() or
-  StructuredBindingAccessTag()
+  StructuredBindingAccessTag() or
+  // The next three cases handle generation of the constants -1, 0 and 1 for __except handling.
+  TryExceptGenerateNegativeOne() or
+  TryExceptGenerateZero() or
+  TryExceptGenerateOne() or
+  // The next three cases handle generation of comparisons for __except handling.
+  TryExceptCompareNegativeOne() or
+  TryExceptCompareZero() or
+  TryExceptCompareOne() or
+  // The next three cases handle generation of branching for __except handling.
+  TryExceptCompareNegativeOneBranch() or
+  TryExceptCompareZeroBranch() or
+  TryExceptCompareOneBranch() or
+  ImplicitDestructorTag(int index) {
+    exists(Expr e | exists(e.getImplicitDestructorCall(index))) or
+    exists(Stmt s | exists(s.getImplicitDestructorCall(index)))
+  } or
+  CoAwaitBranchTag()
 
 class InstructionTag extends TInstructionTag {
-  final string toString() { result = "Tag" }
+  final string toString() { result = getInstructionTagId(this) }
 }
 
 /**
@@ -149,6 +173,14 @@ string getInstructionTagId(TInstructionTag tag) {
   or
   tag = ValueConditionConditionalBranchTag() and result = "ValCondCondBranch"
   or
+  tag = ValueConditionConditionalConstantTag() and result = "ValueConditionConditionalConstant"
+  or
+  tag = ValueConditionConditionalCompareTag() and result = "ValueConditionConditionalCompare"
+  or
+  tag = ValueConditionCompareTag() and result = "ValCondCondCompare"
+  or
+  tag = ValueConditionConstantTag() and result = "ValCondConstant"
+  or
   tag = ConditionValueTrueTempAddressTag() and result = "CondValTrueTempAddr"
   or
   tag = ConditionValueTrueConstantTag() and result = "CondValTrueConst"
@@ -168,6 +200,12 @@ string getInstructionTagId(TInstructionTag tag) {
   tag = BoolConversionConstantTag() and result = "BoolConvConst"
   or
   tag = BoolConversionCompareTag() and result = "BoolConvComp"
+  or
+  tag = NotExprOperationTag() and result = "NotExprOperation"
+  or
+  tag = NotExprConstantTag() and result = "NotExprWithBoolConversionConstant"
+  or
+  tag = ResultCopyTag() and result = "ResultCopy"
   or
   tag = LoadTag() and result = "Load" // Implicit load due to lvalue-to-rvalue conversion
   or
@@ -224,4 +262,28 @@ string getInstructionTagId(TInstructionTag tag) {
   tag = ThisLoadTag() and result = "ThisLoad"
   or
   tag = StructuredBindingAccessTag() and result = "StructuredBindingAccess"
+  or
+  tag = TryExceptCompareNegativeOne() and result = "TryExceptCompareNegativeOne"
+  or
+  tag = TryExceptCompareZero() and result = "TryExceptCompareZero"
+  or
+  tag = TryExceptCompareOne() and result = "TryExceptCompareOne"
+  or
+  tag = TryExceptGenerateNegativeOne() and result = "TryExceptGenerateNegativeOne"
+  or
+  tag = TryExceptGenerateZero() and result = "TryExceptGenerateNegativeOne"
+  or
+  tag = TryExceptGenerateOne() and result = "TryExceptGenerateOne"
+  or
+  tag = TryExceptCompareNegativeOneBranch() and result = "TryExceptCompareNegativeOneBranch"
+  or
+  tag = TryExceptCompareZeroBranch() and result = "TryExceptCompareZeroBranch"
+  or
+  tag = TryExceptCompareOneBranch() and result = "TryExceptCompareOneBranch"
+  or
+  exists(int index |
+    tag = ImplicitDestructorTag(index) and result = "ImplicitDestructor(" + index + ")"
+  )
+  or
+  tag = CoAwaitBranchTag() and result = "CoAwaitBranch"
 }

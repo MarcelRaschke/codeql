@@ -1,12 +1,13 @@
 /** Provides classes for working with JSON Web Token (JWT) libraries. */
 
 import java
-private import semmle.code.java.dataflow.DataFlow
+private import semmle.code.java.dataflow.FlowSinks
+private import semmle.code.java.dataflow.FlowSources
 
 /** A method access that assigns signing keys to a JWT parser. */
-class JwtParserWithInsecureParseSource extends DataFlow::Node {
+class JwtParserWithInsecureParseSource extends ApiSourceNode {
   JwtParserWithInsecureParseSource() {
-    exists(MethodAccess ma, Method m |
+    exists(MethodCall ma, Method m |
       m.getDeclaringType().getAnAncestor() instanceof TypeJwtParser or
       m.getDeclaringType().getAnAncestor() instanceof TypeJwtParserBuilder
     |
@@ -24,8 +25,8 @@ class JwtParserWithInsecureParseSource extends DataFlow::Node {
  * the qualifier of a call to a `parse(token, handler)` method
  * where the `handler` is considered insecure.
  */
-class JwtParserWithInsecureParseSink extends DataFlow::Node {
-  MethodAccess insecureParseMa;
+class JwtParserWithInsecureParseSink extends ApiSinkNode {
+  MethodCall insecureParseMa;
 
   JwtParserWithInsecureParseSink() {
     insecureParseMa.getQualifier() = this.asExpr() and
@@ -42,7 +43,7 @@ class JwtParserWithInsecureParseSink extends DataFlow::Node {
   }
 
   /** Gets the method access that does the insecure parsing. */
-  MethodAccess getParseMethodAccess() { result = insecureParseMa }
+  MethodCall getParseMethodCall() { result = insecureParseMa }
 }
 
 /**
@@ -55,14 +56,15 @@ class JwtParserWithInsecureParseAdditionalFlowStep extends Unit {
 }
 
 /** A set of additional flow steps to consider when working with JWT parsing related data flows. */
-private class DefaultJwtParserWithInsecureParseAdditionalFlowStep extends JwtParserWithInsecureParseAdditionalFlowStep {
+private class DefaultJwtParserWithInsecureParseAdditionalFlowStep extends JwtParserWithInsecureParseAdditionalFlowStep
+{
   override predicate step(DataFlow::Node node1, DataFlow::Node node2) {
     jwtParserStep(node1.asExpr(), node2.asExpr())
   }
 }
 
 /** Models the builder style of `JwtParser` and `JwtParserBuilder`. */
-private predicate jwtParserStep(Expr parser, MethodAccess ma) {
+private predicate jwtParserStep(Expr parser, MethodCall ma) {
   (
     parser.getType().(RefType).getASourceSupertype*() instanceof TypeJwtParser or
     parser.getType().(RefType).getASourceSupertype*() instanceof TypeJwtParserBuilder

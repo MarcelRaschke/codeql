@@ -70,4 +70,15 @@ http.createServer(function(req, res) {
   fs.readFileSync(path); // NOT OK
   mkdirp(path); // NOT OK
   mkdirp.sync(path); // NOT OK
+  func(path);
+});
+function func(x) {
+  fs.readFileSync(x); // NOT OK
+}
+
+const fsp = require("fs/promises");
+http.createServer(function(req, res) {
+  var path = url.parse(req.url, true).query.path;
+
+  fsp.readFile(path); // NOT OK
 });

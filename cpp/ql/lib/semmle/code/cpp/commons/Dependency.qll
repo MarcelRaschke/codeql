@@ -33,7 +33,7 @@ DependencyOptions getDependencyOptions() { any() }
 class DependsSource extends Element {
   DependsSource() {
     // not inside a template instantiation
-    not exists(Element other | this.isFromTemplateInstantiation(other)) or
+    not this.isFromTemplateInstantiation(_) or
     // allow DeclarationEntrys of template specializations
     this.(DeclarationEntry).getDeclaration().(Function).isConstructedFrom(_) or
     this.(DeclarationEntry).getDeclaration().(Class).isConstructedFrom(_)
@@ -66,7 +66,7 @@ class Symbol extends DependsSource {
       not this.(TypeDeclarationEntry).getType() instanceof LocalEnum and
       not this.(TypeDeclarationEntry).getType() instanceof LocalClass and
       not this.(TypeDeclarationEntry).getType() instanceof LocalTypedefType and
-      not this.(TypeDeclarationEntry).getType() instanceof TemplateParameter
+      not this.(TypeDeclarationEntry).getType() instanceof TypeTemplateParameter
       or
       this instanceof NamespaceDeclarationEntry
     )

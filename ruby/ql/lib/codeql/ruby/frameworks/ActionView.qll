@@ -12,26 +12,6 @@ private import codeql.ruby.frameworks.internal.Rails
 private import codeql.ruby.frameworks.Rails
 
 /**
- * DEPRECATED: Import `codeql.ruby.frameworks.Rails` and use `Rails::HtmlSafeCall` instead.
- */
-deprecated class HtmlSafeCall = Rails::HtmlSafeCall;
-
-/**
- * DEPRECATED: Import `codeql.ruby.frameworks.Rails` and use `Rails::HtmlEscapeCall` instead.
- */
-deprecated class HtmlEscapeCall = Rails::HtmlEscapeCall;
-
-/**
- * DEPRECATED: Import `codeql.ruby.frameworks.Rails` and use `Rails::RenderCall` instead.
- */
-deprecated class RenderCall = Rails::RenderCall;
-
-/**
- * DEPRECATED: Import `codeql.ruby.frameworks.Rails` and use `Rails::RenderToCall` instead.
- */
-deprecated class RenderToCall = Rails::RenderToCall;
-
-/**
  * Holds if this AST node is in a context where `ActionView` methods are available.
  */
 predicate inActionViewContext(AstNode n) {
@@ -93,7 +73,8 @@ private class ActionViewCookiesCall extends ActionViewContextCall, CookiesCallIm
  * A call to `render`, `render_to_body` or `render_to_string`, seen as an
  * `HttpResponse`.
  */
-private class RenderCallAsHttpResponse extends DataFlow::CallNode, Http::Server::HttpResponse::Range {
+private class RenderCallAsHttpResponse extends DataFlow::CallNode, Http::Server::HttpResponse::Range
+{
   RenderCallAsHttpResponse() {
     this.asExpr().getExpr() instanceof Rails::RenderCall or
     this.asExpr().getExpr() instanceof Rails::RenderToCall

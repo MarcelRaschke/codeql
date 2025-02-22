@@ -19,8 +19,8 @@ class TextStringBuilderTest {
 
         TextStringBuilder sb1 = new TextStringBuilder(); sb1.append(taint().toCharArray()); sink(sb1.toString()); // $hasTaintFlow
         TextStringBuilder sb2 = new TextStringBuilder(); sb2.append(taint().toCharArray(), 0, 0); sink(sb2.toString()); // $hasTaintFlow
-        TextStringBuilder sb3 = new TextStringBuilder(); sb3.append(CharBuffer.wrap(taint().toCharArray())); sink(sb3.toString()); // $ MISSING: hasTaintFlow
-        TextStringBuilder sb4 = new TextStringBuilder(); sb4.append(CharBuffer.wrap(taint().toCharArray()), 0, 0); sink(sb4.toString()); // $ MISSING: hasTaintFlow
+        TextStringBuilder sb3 = new TextStringBuilder(); sb3.append(CharBuffer.wrap(taint().toCharArray())); sink(sb3.toString()); // $ hasTaintFlow
+        TextStringBuilder sb4 = new TextStringBuilder(); sb4.append(CharBuffer.wrap(taint().toCharArray()), 0, 0); sink(sb4.toString()); // $ hasTaintFlow
         TextStringBuilder sb5 = new TextStringBuilder(); sb5.append((CharSequence)taint()); sink(sb5.toString()); // $hasTaintFlow
         TextStringBuilder sb6 = new TextStringBuilder(); sb6.append((CharSequence)taint(), 0, 0); sink(sb6.toString()); // $hasTaintFlow
         TextStringBuilder sb7 = new TextStringBuilder(); sb7.append((Object)taint()); sink(sb7.toString()); // $hasTaintFlow
@@ -146,7 +146,7 @@ class TextStringBuilderTest {
 
         // Test all fluent methods are passing taint through to their result:
         TextStringBuilder fluentAllMethodsTest = new TextStringBuilder(taint());
-        sink(fluentAllMethodsTest // $hasTaintFlow
+        sink(fluentAllMethodsTest
         .append("text")
         .appendAll("text")
         .appendFixedWidthPadLeft("text", 4, ' ')
@@ -172,7 +172,7 @@ class TextStringBuilderTest {
         .setLength(500)
         .setNewLineText("newline")
         .setNullText("NULL")
-        .trim());
+        .trim()); // $hasTaintFlow
 
         // Test all fluent methods are passing taint back to their qualifier:
         TextStringBuilder fluentAllMethodsTest2 = new TextStringBuilder();

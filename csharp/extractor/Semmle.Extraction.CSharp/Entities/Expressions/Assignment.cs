@@ -1,8 +1,8 @@
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.CSharp;
-using Semmle.Extraction.Kinds;
-using Microsoft.CodeAnalysis;
 using System.IO;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Semmle.Extraction.Kinds;
 
 namespace Semmle.Extraction.CSharp.Entities.Expressions
 {
@@ -26,10 +26,10 @@ namespace Semmle.Extraction.CSharp.Entities.Expressions
             if (operatorKind.HasValue)
             {
                 // Convert assignment such as `a += b` into `a = a + b`.
-                var simpleAssignExpr = new Expression(new ExpressionInfo(Context, Type, Location, ExprKind.SIMPLE_ASSIGN, this, 2, false, null));
+                var simpleAssignExpr = new Expression(new ExpressionInfo(Context, Type, Location, ExprKind.SIMPLE_ASSIGN, this, 2, isCompilerGenerated: true, null));
                 Create(Context, Syntax.Left, simpleAssignExpr, 1);
-                var opexpr = new Expression(new ExpressionInfo(Context, Type, Location, operatorKind.Value, simpleAssignExpr, 0, false, null));
-                Create(Context, Syntax.Left, opexpr, 0);
+                var opexpr = new Expression(new ExpressionInfo(Context, Type, Location, operatorKind.Value, simpleAssignExpr, 0, isCompilerGenerated: true, null));
+                Create(Context, Syntax.Left, opexpr, 0, isCompilerGenerated: true);
                 Create(Context, Syntax.Right, opexpr, 1);
                 opexpr.OperatorCall(trapFile, Syntax);
             }
@@ -71,10 +71,12 @@ namespace Semmle.Extraction.CSharp.Entities.Expressions
                     return ExprKind.ASSIGN_LSHIFT;
                 case SyntaxKind.GreaterThanGreaterThanEqualsToken:
                     return ExprKind.ASSIGN_RSHIFT;
+                case SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken:
+                    return ExprKind.ASSIGN_URSHIFT;
                 case SyntaxKind.QuestionQuestionEqualsToken:
                     return ExprKind.ASSIGN_COALESCE;
                 default:
-                    cx.ModelError(syntax, "Unrecognised assignment type " + GetKind(cx, syntax));
+                    cx.ModelError(syntax, $"Unrecognised assignment type {GetKind(cx, syntax)}");
                     return ExprKind.UNKNOWN;
             }
         }
@@ -141,6 +143,8 @@ namespace Semmle.Extraction.CSharp.Entities.Expressions
                         return ExprKind.REM;
                     case ExprKind.ASSIGN_RSHIFT:
                         return ExprKind.RSHIFT;
+                    case ExprKind.ASSIGN_URSHIFT:
+                        return ExprKind.URSHIFT;
                     case ExprKind.ASSIGN_SUB:
                         return ExprKind.SUB;
                     case ExprKind.ASSIGN_XOR:
@@ -148,7 +152,7 @@ namespace Semmle.Extraction.CSharp.Entities.Expressions
                     case ExprKind.ASSIGN_COALESCE:
                         return ExprKind.NULL_COALESCING;
                     default:
-                        Context.ModelError(Syntax, "Couldn't unfold assignment of type " + kind);
+                        Context.ModelError(Syntax, $"Couldn't unfold assignment of type {kind}");
                         return ExprKind.UNKNOWN;
                 }
             }

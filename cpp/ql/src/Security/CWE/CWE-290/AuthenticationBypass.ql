@@ -12,79 +12,29 @@
  *       external/cwe/cwe-290
  */
 
-import semmle.code.cpp.ir.dataflow.internal.DefaultTaintTrackingImpl
-import TaintedWithPath
+import cpp
+import semmle.code.cpp.dataflow.new.TaintTracking
+import semmle.code.cpp.security.FlowSources as FS
+import Flow::PathGraph
+
+string getATopLevelDomain() {
+  result =
+    [
+      "com", "ru", "net", "org", "de", "jp", "uk", "br", "pl", "in", "it", "fr", "au", "info", "nl",
+      "cn", "ir", "es", "cz", "biz", "ca", "eu", "ua", "kr", "za", "co", "gr", "ro", "se", "tw",
+      "vn", "mx", "ch", "tr", "at", "be", "hu", "tv", "dk", "me", "ar", "us", "no", "sk", "fi",
+      "id", "cl", "nz", "by", "xyz", "pt", "ie", "il", "kz", "my", "hk", "lt", "cc", "sg", "io",
+      "edu", "gov"
+    ]
+}
 
 predicate hardCodedAddressOrIP(StringLiteral txt) {
   exists(string s | s = txt.getValueText() |
     // Hard-coded ip addresses, such as 127.0.0.1
     s.regexpMatch("\"[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+\"") or
     // Hard-coded addresses such as www.mycompany.com
-    s.matches("\"www.%\"") or
-    s.matches("\"http:%\"") or
-    s.matches("\"https:%\"") or
-    s.matches("\"%.com\"") or
-    s.matches("\"%.ru\"") or
-    s.matches("\"%.net\"") or
-    s.matches("\"%.org\"") or
-    s.matches("\"%.de\"") or
-    s.matches("\"%.jp\"") or
-    s.matches("\"%.uk\"") or
-    s.matches("\"%.br\"") or
-    s.matches("\"%.pl\"") or
-    s.matches("\"%.in\"") or
-    s.matches("\"%.it\"") or
-    s.matches("\"%.fr\"") or
-    s.matches("\"%.au\"") or
-    s.matches("\"%.info\"") or
-    s.matches("\"%.nl\"") or
-    s.matches("\"%.cn\"") or
-    s.matches("\"%.ir\"") or
-    s.matches("\"%.es\"") or
-    s.matches("\"%.cz\"") or
-    s.matches("\"%.biz\"") or
-    s.matches("\"%.ca\"") or
-    s.matches("\"%.eu\"") or
-    s.matches("\"%.ua\"") or
-    s.matches("\"%.kr\"") or
-    s.matches("\"%.za\"") or
-    s.matches("\"%.co\"") or
-    s.matches("\"%.gr\"") or
-    s.matches("\"%.ro\"") or
-    s.matches("\"%.se\"") or
-    s.matches("\"%.tw\"") or
-    s.matches("\"%.vn\"") or
-    s.matches("\"%.mx\"") or
-    s.matches("\"%.ch\"") or
-    s.matches("\"%.tr\"") or
-    s.matches("\"%.at\"") or
-    s.matches("\"%.be\"") or
-    s.matches("\"%.hu\"") or
-    s.matches("\"%.tv\"") or
-    s.matches("\"%.dk\"") or
-    s.matches("\"%.me\"") or
-    s.matches("\"%.ar\"") or
-    s.matches("\"%.us\"") or
-    s.matches("\"%.no\"") or
-    s.matches("\"%.sk\"") or
-    s.matches("\"%.fi\"") or
-    s.matches("\"%.id\"") or
-    s.matches("\"%.cl\"") or
-    s.matches("\"%.nz\"") or
-    s.matches("\"%.by\"") or
-    s.matches("\"%.xyz\"") or
-    s.matches("\"%.pt\"") or
-    s.matches("\"%.ie\"") or
-    s.matches("\"%.il\"") or
-    s.matches("\"%.kz\"") or
-    s.matches("\"%.my\"") or
-    s.matches("\"%.hk\"") or
-    s.matches("\"%.lt\"") or
-    s.matches("\"%.cc\"") or
-    s.matches("\"%.sg\"") or
-    s.matches("\"%.io\"") or
-    s.matches("\"%.edu\"") or
-    s.matches("\"%.gov\"")
+    s.regexpMatch("\"(www\\.|http:|https:).*\"") or
+    s.regexpMatch("\".*\\.(" + strictconcat(getATopLevelDomain(), "|") + ")\"")
   )
 }
 
@@ -112,13 +62,26 @@ predicate hardCodedAddressInCondition(Expr subexpression, Expr condition) {
   condition = any(IfStmt ifStmt).getCondition()
 }
 
-class Configuration extends TaintTrackingConfiguration {
-  override predicate isSink(Element sink) { hardCodedAddressInCondition(sink, _) }
+predicate isSource(FS::FlowSource source, string sourceType) { source.getSourceType() = sourceType }
+
+predicate isSink(DataFlow::Node sink, Expr condition) {
+  hardCodedAddressInCondition([sink.asExpr(), sink.asIndirectExpr()], condition)
 }
 
-from Expr subexpression, Expr source, Expr condition, PathNode sourceNode, PathNode sinkNode
+module Config implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node source) { isSource(source, _) }
+
+  predicate isSink(DataFlow::Node sink) { isSink(sink, _) }
+}
+
+module Flow = TaintTracking::Global<Config>;
+
+from
+  Expr subexpression, Expr condition, Flow::PathNode source, Flow::PathNode sink, string sourceType
 where
   hardCodedAddressInCondition(subexpression, condition) and
-  taintedWithPath(source, subexpression, sourceNode, sinkNode)
-select condition, sourceNode, sinkNode,
-  "Untrusted input $@ might be vulnerable to a spoofing attack.", source, source.toString()
+  isSource(source.getNode(), sourceType) and
+  Flow::flowPath(source, sink) and
+  isSink(sink.getNode(), condition)
+select condition, source, sink, "Untrusted input $@ might be vulnerable to a spoofing attack.",
+  source, sourceType

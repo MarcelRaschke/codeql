@@ -10,22 +10,26 @@ import semmle.code.java.security.RequestForgery
 /**
  * A taint-tracking configuration characterising request-forgery risks.
  */
-class RequestForgeryConfiguration extends TaintTracking::Configuration {
-  RequestForgeryConfiguration() { this = "Server-Side Request Forgery" }
-
-  override predicate isSource(DataFlow::Node source) {
-    source instanceof RemoteFlowSource and
+module RequestForgeryConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node source) {
+    source instanceof ActiveThreatModelSource and
     // Exclude results of remote HTTP requests: fetching something else based on that result
     // is no worse than following a redirect returned by the remote server, and typically
     // we're requesting a resource via https which we trust to only send us to safe URLs.
-    not source.asExpr().(MethodAccess).getCallee() instanceof UrlConnectionGetInputStreamMethod
+    not source.asExpr().(MethodCall).getCallee() instanceof UrlConnectionGetInputStreamMethod
   }
 
-  override predicate isSink(DataFlow::Node sink) { sink instanceof RequestForgerySink }
+  predicate isSink(DataFlow::Node sink) { sink instanceof RequestForgerySink }
 
-  override predicate isAdditionalTaintStep(DataFlow::Node pred, DataFlow::Node succ) {
+  predicate isAdditionalFlowStep(DataFlow::Node pred, DataFlow::Node succ) {
     any(RequestForgeryAdditionalTaintStep r).propagatesTaint(pred, succ)
   }
 
-  override predicate isSanitizer(DataFlow::Node node) { node instanceof RequestForgerySanitizer }
+  predicate isBarrier(DataFlow::Node node) { node instanceof RequestForgerySanitizer }
+
+  predicate isBarrierIn(DataFlow::Node node) { isSource(node) }
+
+  predicate observeDiffInformedIncrementalMode() { any() }
 }
+
+module RequestForgeryFlow = TaintTracking::Global<RequestForgeryConfig>;

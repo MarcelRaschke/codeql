@@ -7,6 +7,7 @@
  * @precision medium
  * @tags correctness
  *       security
+ *       experimental
  *       external/cwe/cwe-125
  */
 
@@ -23,7 +24,7 @@ predicate exprMayBeString(Expr exp) {
         fctmp.getAnArgument().(VariableAccess).getTarget() = exp.(VariableAccess).getTarget() or
         globalValueNumber(fctmp.getAnArgument()) = globalValueNumber(exp)
       ) and
-      fctmp.getTarget().hasName(["strlen", "strcat", "strncat", "strcpy", "sptintf", "printf"])
+      fctmp.getTarget().hasName(["strlen", "strcat", "strncat", "strcpy", "sprintf", "printf"])
     )
     or
     exists(AssignExpr astmp |

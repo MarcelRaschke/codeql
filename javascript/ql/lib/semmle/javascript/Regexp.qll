@@ -43,8 +43,6 @@ class RegExpParent extends Locatable, @regexpparent { }
  * ```
  */
 class RegExpTerm extends Locatable, @regexpterm {
-  override Location getLocation() { hasLocation(this, result) }
-
   /** Gets the `i`th child term of this term. */
   RegExpTerm getChild(int i) { regexpterm(result, _, this, i, _) }
 
@@ -940,7 +938,7 @@ private predicate isMatchObjectProperty(string name) {
 
 /** Holds if `call` is a call to `match` whose result is used in a way that is incompatible with Match objects. */
 private predicate isUsedAsNonMatchObject(DataFlow::MethodCallNode call) {
-  call.getMethodName() = "match" and
+  call.getMethodName() = ["match", "matchAll"] and
   call.getNumArgument() = 1 and
   (
     // Accessing a property that is absent on Match objects
@@ -955,6 +953,27 @@ private predicate isUsedAsNonMatchObject(DataFlow::MethodCallNode call) {
     or
     // Result is obviously unused
     call.asExpr() = any(ExprStmt stmt).getExpr()
+  )
+}
+
+/**
+ * Holds if `value` is used in a way that suggests it returns a number.
+ */
+pragma[inline]
+private predicate isUsedAsNumber(DataFlow::LocalSourceNode value) {
+  any(Comparison compare)
+      .hasOperands(value.getALocalUse().asExpr(), any(Expr e | e.analyze().getAType() = TTNumber()))
+  or
+  value.flowsToExpr(any(ArithmeticExpr e).getAnOperand())
+  or
+  value.flowsToExpr(any(UnaryExpr e | e.getOperator() = "-").getOperand())
+  or
+  value.flowsToExpr(any(IndexExpr expr).getPropertyNameExpr())
+  or
+  exists(DataFlow::CallNode call |
+    call.getCalleeName() =
+      ["substring", "substr", "slice", "splice", "charAt", "charCodeAt", "codePointAt", "toSpliced"] and
+    value.flowsTo(call.getAnArgument())
   )
 }
 
@@ -977,7 +996,7 @@ predicate isInterpretedAsRegExp(DataFlow::Node source) {
         not isNativeStringMethod(func, methodName)
       )
     |
-      methodName = "match" and
+      methodName = ["match", "matchAll"] and
       source = mce.getArgument(0) and
       mce.getNumArgument() = 1 and
       not isUsedAsNonMatchObject(mce)
@@ -985,9 +1004,9 @@ predicate isInterpretedAsRegExp(DataFlow::Node source) {
       methodName = "search" and
       source = mce.getArgument(0) and
       mce.getNumArgument() = 1 and
-      // "search" is a common method name, and so we exclude chained accesses
-      // because `String.prototype.search` returns a number
-      not exists(PropAccess p | p.getBase() = mce.getEnclosingExpr())
+      // "search" is a common method name, and the built-in "search" method is rarely used,
+      // so to reduce FPs we also require that the return value appears to be used as a number.
+      isUsedAsNumber(mce)
     )
     or
     exists(DataFlow::SourceNode schema | schema = JsonSchema::getAPartOfJsonSchema() |
@@ -1001,29 +1020,6 @@ predicate isInterpretedAsRegExp(DataFlow::Node source) {
             .flow()
     )
   )
-}
-
-/**
- * Provides utility predicates related to regular expressions.
- */
-deprecated module RegExpPatterns {
-  /**
-   * Gets a pattern that matches common top-level domain names in lower case.
-   * DEPRECATED: use the similarly named predicate from `HostnameRegex` from the `regex` pack instead.
-   */
-  deprecated string getACommonTld() {
-    // according to ranking by http://google.com/search?q=site:.<<TLD>>
-    result = "(?:com|org|edu|gov|uk|net|io)(?![a-z0-9])"
-  }
-
-  /**
-   * Gets a pattern that matches common top-level domain names in lower case.
-   * DEPRECATED: use `getACommonTld` instead
-   */
-  deprecated predicate commonTld = getACommonTld/0;
-
-  /** DEPRECATED: Alias for commonTld */
-  deprecated predicate commonTLD = commonTld/0;
 }
 
 /**
@@ -1165,6 +1161,10 @@ module RegExp {
   /** Holds if `flags` includes the `s` flag. */
   bindingset[flags]
   predicate isDotAll(string flags) { flags.matches("%s%") }
+
+  /** Holds if `flags` includes the `v` flag. */
+  bindingset[flags]
+  predicate isUnicodeSets(string flags) { flags.matches("%v%") }
 
   /** Holds if `flags` includes the `m` flag or is the unknown flag `?`. */
   bindingset[flags]

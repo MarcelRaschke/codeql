@@ -1,10 +1,9 @@
 // This file contains auto-generated code.
-
+// Generated from `System.Net.NameResolution, Version=9.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a`.
 namespace System
 {
     namespace Net
     {
-        // Generated from `System.Net.Dns` in `System.Net.NameResolution, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a`
         public static class Dns
         {
             public static System.IAsyncResult BeginGetHostAddresses(string hostNameOrAddress, System.AsyncCallback requestCallback, object state) => throw null;
@@ -34,15 +33,12 @@ namespace System
             public static string GetHostName() => throw null;
             public static System.Net.IPHostEntry Resolve(string hostName) => throw null;
         }
-
-        // Generated from `System.Net.IPHostEntry` in `System.Net.NameResolution, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a`
         public class IPHostEntry
         {
-            public System.Net.IPAddress[] AddressList { get => throw null; set => throw null; }
-            public string[] Aliases { get => throw null; set => throw null; }
-            public string HostName { get => throw null; set => throw null; }
+            public System.Net.IPAddress[] AddressList { get => throw null; set { } }
+            public string[] Aliases { get => throw null; set { } }
             public IPHostEntry() => throw null;
+            public string HostName { get => throw null; set { } }
         }
-
     }
 }

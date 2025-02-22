@@ -4,9 +4,6 @@ foo()
 # call whose name is a scope resolution
 Foo::bar()
 
-# call whose name is a global scope resolution
-::bar()
-
 # call with a receiver, no arguments or block
 123.bar
 
@@ -269,10 +266,12 @@ foo(&)
 # splat argument
 foo(*bar)
 foo(*X::bar)
+foo(*)
 
 # hash-splat argument
 foo(**bar)
 foo(**X::bar)
+foo(**)
 
 # the value in a keyword argument
 foo(blah: bar)

@@ -7,12 +7,14 @@
  * @precision high
  * @id java/spring-boot-exposed-actuators
  * @tags security
+ *       experimental
  *       external/cwe/cwe-16
  */
 
 import java
-import SpringBootActuators
+deprecated import SpringBootActuators
 
-from PermitAllCall permitAllCall
-where permitAllCall.permitsSpringBootActuators()
-select permitAllCall, "Unauthenticated access to Spring Boot actuator is allowed."
+deprecated query predicate problems(PermitAllCall permitAllCall, string message) {
+  permitAllCall.permitsSpringBootActuators() and
+  message = "Unauthenticated access to Spring Boot actuator is allowed."
+}

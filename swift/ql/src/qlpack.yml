@@ -1,5 +1,5 @@
 name: codeql/swift-queries
-version: 0.0.0
+version: 1.0.18-dev
 groups:
   - swift
   - queries
@@ -9,3 +9,5 @@ defaultSuiteFile: codeql-suites/swift-code-scanning.qls
 dependencies:
   codeql/swift-all: ${workspace}
   codeql/suite-helpers: ${workspace}
+  codeql/util: ${workspace}
+warnOnImplicitThis: true

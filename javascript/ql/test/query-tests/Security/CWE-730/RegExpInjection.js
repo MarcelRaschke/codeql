@@ -42,12 +42,12 @@ app.get('/findKey', function(req, res) {
   if (maybeString.match(input)) {} // NOT OK
   if (notString.match(input)) {} // OK
 
-  defString.search(input); // NOT OK
-  likelyString.search(input); // NOT OK
-  maybeString.search(input); // NOT OK
-  notString.search(input); // OK
+  if (defString.search(input) > -1) {} // NOT OK
+  if (likelyString.search(input) > -1) {} // NOT OK
+  if (maybeString.search(input) > -1) {} // NOT OK
+  if (notString.search(input) > -1) {} // OK
 
-  URI(`${protocol}://${host}${path}`).search(input); // OK, but still flagged [INCONSISTENCY]
+  URI(`${protocol}://${host}${path}`).search(input); // OK
   URI(`${protocol}://${host}${path}`).search(input).href(); // OK
   unknown.search(input).unknown; // OK
 
@@ -62,7 +62,7 @@ app.get('/findKey', function(req, res) {
   Search.search(input); // OK!
 
   new RegExp(input); // NOT OK
-  
+
   var sanitized = input.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
   new RegExp(sanitized); // OK
 });
@@ -85,4 +85,23 @@ app.get('/has-sanitizer', function(req, res) {
   new RegExp(escape2(input)); // OK
 
   new RegExp("^.*\.(" + input.replace(/,/g, "|") + ")$"); // NOT OK
+});
+
+app.get("argv", function(req, res) {
+    new RegExp(`^${process.env.HOME}/Foo/bar.app$`); // NOT OK
+
+    new RegExp(`^${process.argv[1]}/Foo/bar.app$`); // NOT OK
+});
+
+app.get("argv", function(req, res) {
+  var input = req.param("input");
+
+  var sanitized = input.replace(new RegExp("[\\-\\[\\]\\/\\{\\}\\(\\)\\*\\+\\?\\.\\\\\\^\\$\\|]"), "\\$&");
+  new RegExp(sanitized); // NOT OK
+  
+  var sanitized = input.replace(new RegExp("[\\-\\[\\]\\/\\{\\}\\(\\)\\*\\+\\?\\.\\\\\\^\\$\\|]", "g"), "\\$&");
+  new RegExp(sanitized); // OK
+
+  var sanitized = input.replace(new RegExp("[\\-\\[\\]\\/\\{\\}\\(\\)\\*\\+\\?\\.\\\\\\^\\$\\|]", unknownFlags()), "\\$&");
+  new RegExp(sanitized); // OK -- Most likely not a problem.
 });

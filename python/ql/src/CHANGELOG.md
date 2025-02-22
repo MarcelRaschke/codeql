@@ -1,3 +1,274 @@
+## 1.4.3
+
+No user-facing changes.
+
+## 1.4.2
+
+No user-facing changes.
+
+## 1.4.1
+
+No user-facing changes.
+
+## 1.4.0
+
+### New Queries
+
+* The Server Side Template Injection query (`py/template-injection`), originally contributed to the experimental query pack by @porcupineyhairs, has been promoted to the main query suite. This query finds instances of templates for a template engine such as Jinja being constructed with user input.
+
+## 1.3.4
+
+No user-facing changes.
+
+## 1.3.3
+
+No user-facing changes.
+
+## 1.3.2
+
+### Minor Analysis Improvements
+
+* Improved modelling for the `pycurl` framework.
+
+## 1.3.1
+
+No user-facing changes.
+
+## 1.3.0
+
+### New Queries
+
+* The experimental `py/cors-misconfiguration-with-credentials` query, which finds insecure CORS middleware configurations.
+
+## 1.2.2
+
+### Minor Analysis Improvements
+
+* The `py/clear-text-logging-sensitive-data` and `py/clear-text-storage-sensitive-data` queries have been updated to exclude the `certificate` classification of sensitive sources, which often do not contain sensitive data.
+
+## 1.2.1
+
+No user-facing changes.
+
+## 1.2.0
+
+### New Queries
+
+* The `py/cookie-injection` query, originally contributed to the experimental query pack by @jorgectf, has been promoted to the main query pack. This query finds instances of cookies being set without the `Secure`, `HttpOnly`, or `SameSite` attributes set to secure values.
+
+## 1.1.0
+
+### New Queries
+
+* The `py/cookie-injection` query, originally contributed to the experimental query pack by @jorgectf, has been promoted to the main query pack. This query finds instances of cookies being constructed from user input. 
+
+### Minor Analysis Improvements
+
+* Added models of `streamlit` PyPI package.
+
+## 1.0.4
+
+No user-facing changes.
+
+## 1.0.3
+
+### Minor Analysis Improvements
+
+* Adding Python support for Hardcoded Credentials as Models as Data
+* Additional sanitizers have been added to the `py/full-ssrf` and `py/partial-ssrf` queries for methods that verify a string contains only a certain set of characters, such as `.isalnum()` as well as regular expression tests.
+
+## 1.0.2
+
+No user-facing changes.
+
+## 1.0.1
+
+### Minor Analysis Improvements
+
+* Added models for `opml` library.
+
+## 1.0.0
+
+### Breaking Changes
+
+* CodeQL package management is now generally available, and all GitHub-produced CodeQL packages have had their version numbers increased to 1.0.0.
+
+### Minor Analysis Improvements
+
+* Added models of `gradio` PyPI package.
+
+## 0.9.16
+
+### New Queries
+
+* The `py/header-injection` query, originally contributed to the experimental query pack by @jorgectf, has been promoted to the main query pack and renamed to `py/http-response-splitting`. This query finds instances of http header injection / response splitting vulnerabilities.
+
+## 0.9.15
+
+No user-facing changes.
+
+## 0.9.14
+
+No user-facing changes.
+
+## 0.9.13
+
+No user-facing changes.
+
+## 0.9.12
+
+No user-facing changes.
+
+## 0.9.11
+
+No user-facing changes.
+
+## 0.9.10
+
+### New Queries
+
+* The query `py/nosql-injection` for finding NoSQL injection vulnerabilities is now part of the default security suite.
+
+## 0.9.9
+
+No user-facing changes.
+
+## 0.9.8
+
+No user-facing changes.
+
+## 0.9.7
+
+### Minor Analysis Improvements
+
+- Added modeling of YARL's `is_absolute` method and checks of the `netloc` of a parsed URL as sanitizers for the `py/url-redirection` query, leading to fewer false positives.
+
+## 0.9.6
+
+No user-facing changes.
+
+## 0.9.5
+
+No user-facing changes.
+
+## 0.9.4
+
+No user-facing changes.
+
+## 0.9.3
+
+### Minor Analysis Improvements
+
+* Added modeling of more `FileSystemAccess` in packages `cherrypy`, `aiofile`, `aiofiles`, `anyio`, `sanic`, `starlette`, `baize`, and `io`. This will mainly affect the _Uncontrolled data used in path expression_ (`py/path-injection`) query.
+
+## 0.9.2
+
+No user-facing changes.
+
+## 0.9.1
+
+No user-facing changes.
+
+## 0.9.0
+
+### New Queries
+
+* The query `py/nosql-injection` for finding NoSQL injection vulnerabilities is now available in the default security suite.
+
+### Minor Analysis Improvements
+
+* Improved _URL redirection from remote source_ (`py/url-redirection`) query to not alert when URL has been checked with `django.utils.http. url_has_allowed_host_and_scheme`.
+* Extended the `py/command-line-injection` query with sinks from Python's `asyncio` module.
+
+## 0.8.5
+
+No user-facing changes.
+
+## 0.8.4
+
+### Minor Analysis Improvements
+
+* Improved _Reflected server-side cross-site scripting_ (`py/reflective-xss`) query to not alert on data passed to `flask.jsonify`. Since these HTTP responses are returned with mime-type `application/json`, they do not pose a security risk for XSS.
+* Updated path explanations for `@kind path-problem` queries to always include left hand side of assignments, making paths easier to understand.
+
+## 0.8.3
+
+No user-facing changes.
+
+## 0.8.2
+
+No user-facing changes.
+
+## 0.8.1
+
+### Minor Analysis Improvements
+
+* Fixed modeling of `aiohttp.ClientSession` so we properly handle `async with` uses. This can impact results of server-side request forgery queries (`py/full-ssrf`, `py/partial-ssrf`).
+
+## 0.8.0
+
+### Bug Fixes
+
+* The query "Arbitrary file write during archive extraction ("Zip Slip")" (`py/zipslip`) has been renamed to "Arbitrary file access during archive extraction ("Zip Slip")."
+
+## 0.7.4
+
+No user-facing changes.
+
+## 0.7.3
+
+### Bug Fixes
+
+* The display name (`@name`) of the `py/unsafe-deserialization` query has been updated in favor of consistency with other languages.
+
+## 0.7.2
+
+No user-facing changes.
+
+## 0.7.1
+
+No user-facing changes.
+
+## 0.7.0
+
+### Bug Fixes
+
+* Nonlocal variables are excluded from alerts.
+
+## 0.6.6
+
+No user-facing changes.
+
+## 0.6.5
+
+### New Queries
+
+* Added a new query, `py/shell-command-constructed-from-input`, to detect libraries that unsafely construct shell commands from their inputs.
+
+## 0.6.4
+
+No user-facing changes.
+
+## 0.6.3
+
+No user-facing changes.
+
+## 0.6.2
+
+No user-facing changes.
+
+## 0.6.1
+
+No user-facing changes.
+
+## 0.6.0
+
+### Minor Analysis Improvements
+
+* The `analysis/AlertSuppression.ql` query has moved to the root folder. Users that refer to this query by path should update their configurations. The query has been updated to support the new `# codeql[query-id]` supression comments. These comments can be used to suppress an alert and must be placed on a blank line before the alert. In addition the legacy `# lgtm` and `# lgtm[query-id]` comments can now also be placed on the line before an alert.
+* Bumped the minimum keysize we consider secure for elliptic curve cryptography from 224 to 256 bits, following current best practices. This might effect results from the _Use of weak cryptographic key_ (`py/weak-crypto-key`) query.
+* Added modeling of `getpass.getpass` as a source of passwords, which will be an additional source for `py/clear-text-logging-sensitive-data`, `py/clear-text-storage-sensitive-data`, and `py/weak-sensitive-data-hashing`.
+
 ## 0.5.6
 
 No user-facing changes.
@@ -115,7 +386,7 @@ No user-facing changes.
 
 ### Bug Fixes
 
-* The [View AST functionality](https://codeql.github.com/docs/codeql-for-visual-studio-code/exploring-the-structure-of-your-source-code/) no longer prints detailed information about regular expressions, greatly improving performance.
+* The [View AST functionality](https://docs.github.com/en/code-security/codeql-for-vs-code/using-the-advanced-functionality-of-the-codeql-for-vs-code-extension/exploring-the-structure-of-your-source-code) no longer prints detailed information about regular expressions, greatly improving performance.
 
 ## 0.0.8
 

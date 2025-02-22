@@ -93,6 +93,8 @@ module Stages {
       exists(PyFlow::DefinitionNode b)
       or
       exists(any(PyFlow::SequenceNode n).getElement(_))
+      or
+      exists(any(PyFlow::ControlFlowNode c).toString())
     }
   }
 
@@ -109,6 +111,7 @@ module Stages {
     predicate ref() { 1 = 1 }
 
     private import semmle.python.dataflow.new.DataFlow::DataFlow as NewDataFlow
+    private import semmle.python.dataflow.new.internal.TypeTrackingImpl as TypeTrackingImpl
     private import semmle.python.ApiGraphs::API as API
 
     /**
@@ -119,9 +122,48 @@ module Stages {
     predicate backref() {
       1 = 1
       or
-      exists(any(NewDataFlow::TypeTracker t).append(_))
+      exists(TypeTrackingImpl::append(_, _))
       or
       exists(any(API::Node n).getAMember().getAValueReachableFromSource())
+    }
+  }
+
+  /**
+   * The points-to stage.
+   */
+  cached
+  module PointsTo {
+    /**
+     * Always holds.
+     * Ensures that a predicate is evaluated as part of the points-to stage.
+     */
+    cached
+    predicate ref() { 1 = 1 }
+
+    private import semmle.python.pointsto.Base as PointsToBase
+    private import semmle.python.types.Object as TypeObject
+    private import semmle.python.objects.TObject as TObject
+    private import semmle.python.objects.ObjectInternal as ObjectInternal
+    // have to alias since this module is also called PointsTo
+    private import semmle.python.pointsto.PointsTo as RealPointsTo
+
+    /**
+     * DONT USE!
+     * Contains references to each predicate that use the above `ref` predicate.
+     */
+    cached
+    predicate backref() {
+      1 = 1
+      or
+      PointsToBase::BaseFlow::scope_entry_value_transfer_from_earlier(_, _, _, _)
+      or
+      exists(TypeObject::Object a)
+      or
+      exists(TObject::TObject f)
+      or
+      exists(any(ObjectInternal::ObjectInternal o).toString())
+      or
+      RealPointsTo::AttributePointsTo::variableAttributePointsTo(_, _, _, _, _)
     }
   }
 
@@ -138,14 +180,9 @@ module Stages {
     predicate ref() { 1 = 1 }
 
     private import semmle.python.dataflow.new.internal.DataFlowPublic as DataFlowPublic
+    private import semmle.python.dataflow.new.internal.DataFlowDispatch as DataFlowDispatch
     private import semmle.python.dataflow.new.internal.LocalSources as LocalSources
     private import semmle.python.internal.Awaited as Awaited
-    private import semmle.python.pointsto.Base as PointsToBase
-    private import semmle.python.types.Object as TypeObject
-    private import semmle.python.objects.TObject as TObject
-    private import semmle.python.Flow as Flow
-    private import semmle.python.objects.ObjectInternal as ObjectInternal
-    private import semmle.python.pointsto.PointsTo as PointsTo
 
     /**
      * DONT USE!
@@ -157,23 +194,15 @@ module Stages {
       or
       exists(any(DataFlowPublic::Node node).toString())
       or
-      any(DataFlowPublic::Node node).hasLocationInfo(_, _, _, _, _)
+      exists(any(DataFlowPublic::Node node).getLocation())
+      or
+      DataFlowDispatch::resolveCall(_, _, _)
+      or
+      DataFlowDispatch::getCallArg(_, _, _, _, _)
       or
       any(LocalSources::LocalSourceNode n).flowsTo(_)
       or
       exists(Awaited::awaited(_))
-      or
-      PointsToBase::BaseFlow::scope_entry_value_transfer_from_earlier(_, _, _, _)
-      or
-      exists(TypeObject::Object a)
-      or
-      exists(TObject::TObject f)
-      or
-      exists(any(Flow::ControlFlowNode c).toString())
-      or
-      exists(any(ObjectInternal::ObjectInternal o).toString())
-      or
-      PointsTo::AttributePointsTo::variableAttributePointsTo(_, _, _, _, _)
     }
   }
 }

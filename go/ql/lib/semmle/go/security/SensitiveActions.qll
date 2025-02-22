@@ -35,7 +35,7 @@ module HeuristicNames {
    */
   string maybePassword() {
     result = "(?is).*pass(wd|word|code|phrase)(?!.*question).*" or
-    result = "(?is).*(auth(entication|ori[sz]ation)?)key.*"
+    result = "(?is).*(auth(entication|ori[sz]ation)?|api|secret)key.*"
   }
 
   /**
@@ -233,10 +233,10 @@ module PasswordHeuristics {
   predicate isDummyPassword(string password) {
     password.length() < 4
     or
-    exists(string normalized | normalized = password.toLowerCase() |
-      count(normalized.charAt(_)) = 1 or
-      normalized
-          .regexpMatch(".*(pass|test|sample|example|secret|root|admin|user|change|auth|redacted|0123456789).*")
-    )
+    password.length() <= 100 and
+    count(password.charAt(_)) <= 2 // aaaaaaaa or bBbBbB or ghghghghghgh or the like
+    or
+    password
+        .regexpMatch("(?i).*(pass|test|sample|example|secret|root|admin|user|change|auth|redacted|0123456789).*")
   }
 }

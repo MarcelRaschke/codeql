@@ -117,7 +117,11 @@ private newtype TPrintAstNode =
   TElementNode(Element el) { shouldPrint(el, _) } or
   TForInitNode(ForStmt fs) { shouldPrint(fs, _) and exists(fs.getAnInit()) } or
   TLocalVarDeclNode(LocalVariableDeclExpr lvde) {
-    shouldPrint(lvde, _) and lvde.getParent() instanceof SingleLocalVarDeclParent
+    shouldPrint(lvde, _) and
+    (
+      lvde.getParent() instanceof SingleLocalVarDeclParent or
+      lvde.getParent() instanceof PatternCase
+    )
   } or
   TAnnotationsNode(Annotatable ann) {
     shouldPrint(ann, _) and
@@ -132,9 +136,9 @@ private newtype TPrintAstNode =
   TGenericTypeNode(GenericType ty) { shouldPrint(ty, _) } or
   TGenericCallableNode(GenericCallable c) { shouldPrint(c, _) } or
   TDocumentableNode(Documentable d) { shouldPrint(d, _) and exists(d.getJavadoc()) } or
-  TJavadocNode(Javadoc jd) { exists(Documentable d | d.getJavadoc() = jd | shouldPrint(d, _)) } or
-  TJavadocElementNode(JavadocElement jd) {
-    exists(Documentable d | d.getJavadoc() = jd.getParent*() | shouldPrint(d, _))
+  TJavadocNode(Javadoc jd, Documentable d) { d.getJavadoc() = jd and shouldPrint(d, _) } or
+  TJavadocElementNode(JavadocElement jd, Documentable d) {
+    d.getJavadoc() = jd.getParent*() and shouldPrint(d, _)
   } or
   TImportsNode(CompilationUnit cu) {
     shouldPrint(cu, _) and exists(Import i | i.getCompilationUnit() = cu)
@@ -416,6 +420,23 @@ final class ForStmtNode extends ExprStmtNode {
 }
 
 /**
+ * A node representing a `PatternCase`.
+ */
+final class PatternCaseNode extends ExprStmtNode {
+  PatternCase pc;
+
+  PatternCaseNode() { pc = element }
+
+  override PrintAstNode getChild(int childIndex) {
+    result = super.getChild(childIndex) and
+    not result.(ElementNode).getElement() instanceof LocalVariableDeclExpr and
+    not result.(ElementNode).getElement() instanceof TypeAccess
+    or
+    result = TLocalVarDeclNode(pc.getPattern(childIndex))
+  }
+}
+
+/**
  * An element that can be the parent of up to one `LocalVariableDeclExpr` for which we want
  * to use a synthetic node to hold the variable declaration and its `TypeAccess`.
  */
@@ -438,7 +459,7 @@ private class SingleLocalVarDeclParent extends ExprOrStmt {
  * want to use a synthetic node to variable declaration and its type access.
  *
  * Excludes `LocalVariableDeclStmt` and `ForStmt`, as they can hold multiple declarations.
- * For these cases, either a synthetic node is not necassary or a different synthetic node is used.
+ * For these cases, either a synthetic node is not necessary or a different synthetic node is used.
  */
 final class SingleLocalVarDeclParentNode extends ExprStmtNode {
   SingleLocalVarDeclParent lvdp;
@@ -537,17 +558,13 @@ final class ClassInterfaceNode extends ElementNode {
     or
     childIndex >= 0 and
     result.(ElementNode).getElement() =
-      rank[childIndex](Element e, string file, int line, int column, string childStr, int argCount |
+      rank[childIndex](Element e, string file, int line, int column, string childStr, string sig |
         e = this.getADeclaration() and
         locationSortKeys(e, file, line, column) and
         childStr = e.toString() and
-        (
-          if e instanceof Callable
-          then argCount = e.(Callable).getNumberOfParameters()
-          else argCount = 0
-        )
+        (if e instanceof Callable then sig = e.(Callable).getStringSignature() else sig = "")
       |
-        e order by file, line, column, childStr, argCount
+        e order by file, line, column, childStr, sig
       )
   }
 }
@@ -646,7 +663,11 @@ final class LocalVarDeclSynthNode extends PrintAstNode, TLocalVarDeclNode {
 
   LocalVarDeclSynthNode() { this = TLocalVarDeclNode(lvde) }
 
-  override string toString() { result = "(Single Local Variable Declaration)" }
+  override string toString() {
+    if lvde.getParent() instanceof PatternCase
+    then result = "(Pattern case declaration)"
+    else result = "(Single Local Variable Declaration)"
+  }
 
   override ElementNode getChild(int childIndex) {
     childIndex = 0 and
@@ -794,6 +815,7 @@ final class DocumentableNode extends PrintAstNode, TDocumentableNode {
   override Location getLocation() { none() }
 
   override JavadocNode getChild(int childIndex) {
+    result.getDocumentable() = d and
     result.getJavadoc() =
       rank[childIndex](Javadoc jd, string file, int line, int column |
         jd.getCommentedElement() = d and jd.getLocation().hasLocationInfo(file, line, column, _, _)
@@ -814,14 +836,16 @@ final class DocumentableNode extends PrintAstNode, TDocumentableNode {
  */
 final class JavadocNode extends PrintAstNode, TJavadocNode {
   Javadoc jd;
+  Documentable d;
 
-  JavadocNode() { this = TJavadocNode(jd) }
+  JavadocNode() { this = TJavadocNode(jd, d) and not duplicateMetadata(d) }
 
   override string toString() { result = getQlClass(jd) + jd.toString() }
 
   override Location getLocation() { result = jd.getLocation() }
 
   override JavadocElementNode getChild(int childIndex) {
+    result.getDocumentable() = d and
     result.getJavadocElement() = jd.getChild(childIndex)
   }
 
@@ -829,6 +853,11 @@ final class JavadocNode extends PrintAstNode, TJavadocNode {
    * Gets the `Javadoc` represented by this node.
    */
   Javadoc getJavadoc() { result = jd }
+
+  /**
+   * Gets the `Documentable` whose `Javadoc` is represented by this node.
+   */
+  Documentable getDocumentable() { result = d }
 }
 
 /**
@@ -837,14 +866,16 @@ final class JavadocNode extends PrintAstNode, TJavadocNode {
  */
 final class JavadocElementNode extends PrintAstNode, TJavadocElementNode {
   JavadocElement jd;
+  Documentable d;
 
-  JavadocElementNode() { this = TJavadocElementNode(jd) }
+  JavadocElementNode() { this = TJavadocElementNode(jd, d) and not duplicateMetadata(d) }
 
   override string toString() { result = getQlClass(jd) + jd.toString() }
 
   override Location getLocation() { result = jd.getLocation() }
 
   override JavadocElementNode getChild(int childIndex) {
+    result.getDocumentable() = d and
     result.getJavadocElement() = jd.(JavadocParent).getChild(childIndex)
   }
 
@@ -852,6 +883,11 @@ final class JavadocElementNode extends PrintAstNode, TJavadocElementNode {
    * Gets the `JavadocElement` represented by this node.
    */
   JavadocElement getJavadocElement() { result = jd }
+
+  /**
+   * Gets the `Documentable` whose `JavadocElement` is represented by this node.
+   */
+  Documentable getDocumentable() { result = d }
 }
 
 /**

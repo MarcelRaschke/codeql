@@ -82,9 +82,9 @@ private predicate relevantExport(ES2015Module m, string x) {
     x = id.getASpecifier().getImportedName()
   )
   or
-  exists(ReExportDeclaration rexp, string y |
+  exists(ReExportDeclaration rexp |
     rexp.getReExportedModule() = m and
-    reExportsAs(rexp, x, y)
+    reExportsAs(rexp, x, _)
   )
 }
 
@@ -426,7 +426,7 @@ private class AnalyzedExportNamespaceSpecifier extends AnalyzedPropertyWrite, Da
   }
 
   override predicate writesValue(AbstractValue baseVal, string propName, AbstractValue value) {
-    baseVal = TAbstractExportsObject(getTopLevel()) and
+    baseVal = TAbstractExportsObject(this.getTopLevel()) and
     propName = astNode.getExportedName() and
     value = TAbstractExportsObject(decl.getReExportedModule())
   }

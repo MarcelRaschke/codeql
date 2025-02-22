@@ -9,6 +9,7 @@
  * @precision medium
  * @id java/server-directory-listing
  * @tags security
+ *       experimental
  *       external/cwe/cwe-548
  */
 
@@ -45,6 +46,7 @@ class DirectoryListingInitParam extends WebXmlElement {
   }
 }
 
-from DirectoryListingInitParam initp
-where initp.isListingEnabled()
-select initp, "Directory listing should be disabled to mitigate filename and path disclosure."
+deprecated query predicate problems(DirectoryListingInitParam initp, string message) {
+  initp.isListingEnabled() and
+  message = "Directory listing should be disabled to mitigate filename and path disclosure."
+}

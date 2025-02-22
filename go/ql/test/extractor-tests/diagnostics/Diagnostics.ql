@@ -1,4 +1,5 @@
 import go
+private import semmle.go.internal.Locations
 
 bindingset[path]
 string baseName(string path) { result = path.regexpCapture(".*(/|\\\\)([^/\\\\]+)(/|\\\\)?$", 2) }
@@ -30,7 +31,12 @@ class Diagnostic extends @diagnostic {
     diagnostic_for(this, c, fileNum, idx)
   }
 
-  Location getLocation() { diagnostics(this, _, _, _, _, result) }
+  DbLocation getLocation() {
+    exists(@location loc |
+      diagnostics(this, _, _, _, _, loc) and
+      result = TDbLocation(loc)
+    )
+  }
 
   // string getTag() {
   //   diagnostics(this, _, result, _, _, _)
@@ -44,7 +50,7 @@ class Diagnostic extends @diagnostic {
 }
 
 /**
- * Wraps `Compilation`, removing the `.exe` suffixes from compilation descriptions
+ * A wrapper around a `Compilation`, removing the `.exe` suffixes from compilation descriptions
  * such that this test produces the same results on Windows and non-Windows platforms.
  */
 class PlatformNeutralCompilation extends Compilation {

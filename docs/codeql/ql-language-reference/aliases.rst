@@ -63,11 +63,11 @@ Use the following syntax to define an alias for a :ref:`type <types>`:
 Note that ``class`` is just a keyword. You can define an alias for any type—namely, :ref:`primitive types <primitive-types>`,
 :ref:`database types <database-types>` and user-defined :ref:`classes <classes>`.
 
-For example, you can use an alias to abbreviate the name of the primitive type ``boolean`` to ``bool``:
+For example, you can use an alias to abbreviate the name of the primitive type ``boolean`` to ``Bool``:
 
 .. code-block:: ql
 
-    class bool = boolean;
+    class Bool = boolean;
 
 Or, to use a class ``OneTwo`` defined in a :ref:`module <explicit-modules>` ``M`` in 
 ``OneTwoThreeLib.qll``, you could create an alias to use the shorter name ``OT`` instead:
@@ -124,3 +124,19 @@ You could give the predicate a more descriptive name as follows:
 .. code-block:: ql
 
     predicate lessThanTen = isSmall/1;
+
+.. _weak_strong_aliases:
+
+Strong and weak aliases
+=======================
+
+Every alias definition is either **strong** or **weak**.
+An alias definition is **strong** if and only if it is a :ref:`type alias <type-aliases>` definition with
+:ref:`annotation <annotations>` ``final``.
+During :ref:`name resolution <name-resolution>`, ambiguity between aliases from **weak** alias definitions
+for the same module/type/predicate is allowed, but ambiguity between between aliases from distinct **strong**
+alias definitions is invalid QL.
+Likewise, for the purpose of applicative instantiation of :ref:`parameterised modules <parameterized-modules>`
+and `:ref:`parameterised module signatures <parameterized-module-signatures>`, aliases from **weak** alias
+definitions for instantiation arguments do not result in separate instantiations, but aliases from **strong**
+alias definitions for instantiation arguments do.

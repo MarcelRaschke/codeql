@@ -11,23 +11,14 @@ import go
 module ZipSlip {
   import ZipSlipCustomizations::ZipSlip
 
-  /**
-   * A taint-tracking configuration for reasoning about zip-slip vulnerabilities.
-   */
-  class Configuration extends TaintTracking::Configuration {
-    Configuration() { this = "ZipSlip" }
+  private module Config implements DataFlow::ConfigSig {
+    predicate isSource(DataFlow::Node source) { source instanceof Source }
 
-    override predicate isSource(DataFlow::Node source) { source instanceof Source }
+    predicate isSink(DataFlow::Node sink) { sink instanceof Sink }
 
-    override predicate isSink(DataFlow::Node sink) { sink instanceof Sink }
-
-    override predicate isSanitizer(DataFlow::Node node) {
-      super.isSanitizer(node) or
-      node instanceof Sanitizer
-    }
-
-    deprecated override predicate isSanitizerGuard(DataFlow::BarrierGuard guard) {
-      guard instanceof SanitizerGuard
-    }
+    predicate isBarrier(DataFlow::Node node) { node instanceof Sanitizer }
   }
+
+  /** Tracks taint flow for reasoning about zip-slip vulnerabilities. */
+  module Flow = TaintTracking::Global<Config>;
 }

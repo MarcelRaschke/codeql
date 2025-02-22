@@ -11,18 +11,68 @@ private import semmle.python.Concepts
 private import semmle.python.ApiGraphs
 private import semmle.python.frameworks.Pydantic
 private import semmle.python.frameworks.Starlette
+private import semmle.python.frameworks.data.ModelsAsData
 
 /**
+ * INTERNAL: Do not use.
+ *
  * Provides models for the `fastapi` PyPI package.
  * See https://fastapi.tiangolo.com/.
  */
-private module FastApi {
+module FastApi {
   /**
    * Provides models for FastAPI applications (an instance of `fastapi.FastAPI`).
    */
   module App {
+    API::Node cls() { result = API::moduleImport("fastapi").getMember("FastAPI") }
+
     /** Gets a reference to a FastAPI application (an instance of `fastapi.FastAPI`). */
-    API::Node instance() { result = API::moduleImport("fastapi").getMember("FastAPI").getReturn() }
+    API::Node instance() { result = cls().getReturn() }
+  }
+
+  /**
+   * A call to `app.add_middleware` adding a generic middleware.
+   */
+  private class AddMiddlewareCall extends DataFlow::CallCfgNode {
+    AddMiddlewareCall() { this = App::instance().getMember("add_middleware").getACall() }
+
+    /**
+     * Gets the string corresponding to the middleware
+     */
+    string getMiddlewareName() { result = this.getArg(0).asExpr().(Name).getId() }
+  }
+
+  /**
+   * A call to `app.add_middleware` adding CORSMiddleware.
+   */
+  class AddCorsMiddlewareCall extends Http::Server::CorsMiddleware::Range, AddMiddlewareCall {
+    /**
+     * Gets the string corresponding to the middleware
+     */
+    override string getMiddlewareName() { result = this.getArg(0).asExpr().(Name).getId() }
+
+    /**
+     * Gets the dataflow node corresponding to the allowed CORS origins
+     */
+    override DataFlow::Node getOrigins() { result = this.getArgByName("allow_origins") }
+
+    /**
+     * Gets the boolean value corresponding to if CORS credentials is enabled
+     * (`true`) or disabled (`false`) by this node.
+     */
+    override DataFlow::Node getCredentialsAllowed() {
+      result = this.getArgByName("allow_credentials")
+    }
+
+    /**
+     * Gets the dataflow node corresponding to the allowed CORS methods
+     */
+    DataFlow::Node getMethods() { result = this.getArgByName("allow_methods") }
+
+    /**
+     * Gets the dataflow node corresponding to the allowed CORS headers
+     */
+    DataFlow::Node getHeaders() { result = this.getArgByName("allow_headers") }
   }
 
   /**
@@ -31,14 +81,15 @@ private module FastApi {
    * See https://fastapi.tiangolo.com/tutorial/bigger-applications/.
    */
   module ApiRouter {
-    /** Gets a reference to an instance of `fastapi.ApiRouter`. */
-    API::Node instance() {
-      result = API::moduleImport("fastapi").getMember("APIRouter").getASubclass*().getReturn()
+    API::Node cls() {
+      result = API::moduleImport("fastapi").getMember("APIRouter").getASubclass*()
+      or
+      result = ModelOutput::getATypeNode("fastapi.APIRouter~Subclass").getASubclass*()
     }
-  }
 
-  /** DEPRECATED: Alias for ApiRouter */
-  deprecated module APIRouter = ApiRouter;
+    /** Gets a reference to an instance of `fastapi.ApiRouter`. */
+    API::Node instance() { result = cls().getReturn() }
+  }
 
   // ---------------------------------------------------------------------------
   // routing modeling
@@ -69,6 +120,9 @@ private module FastApi {
       result = this.getARequestHandler().getArgByName(_) and
       // type-annotated with `Response`
       not any(Response::RequestHandlerParam src).asExpr() = result
+      or
+      // **kwargs
+      result = this.getARequestHandler().getKwarg()
     }
 
     override DataFlow::Node getUrlPatternArg() {
@@ -88,7 +142,8 @@ private module FastApi {
    * Pydantic model.
    */
   private class PydanticModelRequestHandlerParam extends Pydantic::BaseModel::InstanceSource,
-    DataFlow::ParameterNode {
+    DataFlow::ParameterNode
+  {
     PydanticModelRequestHandlerParam() {
       this.getParameter().getAnnotation() =
         Pydantic::BaseModel::subclassRef().getAValueReachableFromSource().asExpr() and
@@ -103,7 +158,8 @@ private module FastApi {
    * A parameter to a request handler that has a WebSocket type-annotation.
    */
   private class WebSocketRequestHandlerParam extends Starlette::WebSocket::InstanceSource,
-    DataFlow::ParameterNode {
+    DataFlow::ParameterNode
+  {
     WebSocketRequestHandlerParam() {
       this.getParameter().getAnnotation() =
         Starlette::WebSocket::classRef().getAValueReachableFromSource().asExpr() and
@@ -172,7 +228,7 @@ private module FastApi {
       |
         exists(Assign assign | assign = cls.getAStmt() |
           assign.getATarget().(Name).getId() = "media_type" and
-          result = assign.getValue().(StrConst).getText()
+          result = assign.getValue().(StringLiteral).getText()
         )
         or
         // TODO: this should use a proper MRO calculation instead
@@ -196,7 +252,8 @@ private module FastApi {
 
     /** A direct instantiation of a response class. */
     private class ResponseInstantiation extends InstanceSource, Http::Server::HttpResponse::Range,
-      DataFlow::CallCfgNode {
+      DataFlow::CallCfgNode
+    {
       API::Node baseApiNode;
       API::Node responseClass;
 
@@ -223,7 +280,8 @@ private module FastApi {
      * A direct instantiation of a redirect response.
      */
     private class RedirectResponseInstantiation extends ResponseInstantiation,
-      Http::Server::HttpRedirectResponse::Range {
+      Http::Server::HttpRedirectResponse::Range
+    {
       RedirectResponseInstantiation() { baseApiNode = getModeledResponseClass("RedirectResponse") }
 
       override DataFlow::Node getRedirectLocation() {
@@ -246,7 +304,8 @@ private module FastApi {
      * An implicit response from a return of FastAPI request handler.
      */
     private class FastApiRequestHandlerReturn extends Http::Server::HttpResponse::Range,
-      DataFlow::CfgNode {
+      DataFlow::CfgNode
+    {
       FastApiRouteSetup routeSetup;
 
       FastApiRequestHandlerReturn() {
@@ -273,7 +332,8 @@ private module FastApi {
      * `response_class` set to a `FileResponse`.
      */
     private class FastApiRequestHandlerFileResponseReturn extends FastApiRequestHandlerReturn,
-      FileSystemAccess::Range {
+      FileSystemAccess::Range
+    {
       FastApiRequestHandlerFileResponseReturn() {
         exists(API::Node responseClass |
           responseClass.getAValueReachableFromSource() = routeSetup.getResponseClassArg() and
@@ -291,7 +351,8 @@ private module FastApi {
      * `response_class` set to a `RedirectResponse`.
      */
     private class FastApiRequestHandlerRedirectReturn extends FastApiRequestHandlerReturn,
-      Http::Server::HttpRedirectResponse::Range {
+      Http::Server::HttpRedirectResponse::Range
+    {
       FastApiRequestHandlerRedirectReturn() {
         exists(API::Node responseClass |
           responseClass.getAValueReachableFromSource() = routeSetup.getResponseClassArg() and
@@ -332,7 +393,7 @@ private module FastApi {
     /**
      * A call to `set_cookie` on a FastAPI Response.
      */
-    private class SetCookieCall extends Http::Server::CookieWrite::Range, DataFlow::MethodCallNode {
+    private class SetCookieCall extends Http::Server::SetCookieCall, DataFlow::MethodCallNode {
       SetCookieCall() { this.calls(instance(), "set_cookie") }
 
       override DataFlow::Node getHeaderArg() { none() }
@@ -345,27 +406,59 @@ private module FastApi {
     }
 
     /**
-     * A call to `append` on a `headers` of a FastAPI Response, with the `Set-Cookie`
-     * header-key.
+     * A call to `append` on a `headers` of a FastAPI Response.
      */
-    private class HeadersAppendCookie extends Http::Server::CookieWrite::Range,
-      DataFlow::MethodCallNode {
-      HeadersAppendCookie() {
-        exists(DataFlow::AttrRead headers, DataFlow::Node keyArg |
+    private class HeadersAppend extends Http::Server::ResponseHeaderWrite::Range,
+      DataFlow::MethodCallNode
+    {
+      HeadersAppend() {
+        exists(DataFlow::AttrRead headers |
           headers.accesses(instance(), "headers") and
-          this.calls(headers, "append") and
-          keyArg in [this.getArg(0), this.getArgByName("key")] and
-          keyArg.getALocalSource().asExpr().(StrConst).getText().toLowerCase() = "set-cookie"
+          this.calls(headers, "append")
         )
       }
 
-      override DataFlow::Node getHeaderArg() {
+      override DataFlow::Node getNameArg() { result = [this.getArg(0), this.getArgByName("key")] }
+
+      override DataFlow::Node getValueArg() {
         result in [this.getArg(1), this.getArgByName("value")]
       }
 
-      override DataFlow::Node getNameArg() { none() }
+      override predicate nameAllowsNewline() { none() }
 
-      override DataFlow::Node getValueArg() { none() }
+      override predicate valueAllowsNewline() { none() }
+    }
+
+    /**
+     * A dict-like write to an item of the `headers` attribute on a HTTP response, such as
+     * `response.headers[name] = value`.
+     */
+    class HeaderSubscriptWrite extends Http::Server::ResponseHeaderWrite::Range {
+      DataFlow::Node index;
+      DataFlow::Node value;
+
+      HeaderSubscriptWrite() {
+        exists(SubscriptNode subscript, DataFlow::AttrRead headerLookup |
+          // To give `this` a value, we need to choose between either LHS or RHS,
+          // and just go with the LHS
+          this.asCfgNode() = subscript
+        |
+          headerLookup.accesses(instance(), "headers") and
+          exists(DataFlow::Node subscriptObj | subscriptObj.asCfgNode() = subscript.getObject() |
+            headerLookup.flowsTo(subscriptObj)
+          ) and
+          value.asCfgNode() = subscript.(DefinitionNode).getValue() and
+          index.asCfgNode() = subscript.getIndex()
+        )
+      }
+
+      override DataFlow::Node getNameArg() { result = index }
+
+      override DataFlow::Node getValueArg() { result = value }
+
+      override predicate nameAllowsNewline() { none() }
+
+      override predicate valueAllowsNewline() { none() }
     }
   }
 }

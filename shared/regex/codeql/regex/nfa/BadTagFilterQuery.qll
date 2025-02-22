@@ -23,9 +23,15 @@ module Make<RegexTreeViewSig TreeImpl> {
     RootTerm root, string str, boolean ignorePrefix, boolean testWithGroups
   ) {
     // the regexp must mention "<" and ">" explicitly.
-    forall(string angleBracket | angleBracket = ["<", ">"] |
-      any(RegExpConstant term | term.getValue().matches("%" + angleBracket + "%")).getRootTerm() =
-        root
+    (
+      forall(string angleBracket | angleBracket = ["<", ">"] |
+        any(RegExpConstant term | term.getValue().matches("%" + angleBracket + "%")).getRootTerm() =
+          root
+      )
+      or
+      // or contain "-->" / "--!>" / "<--" / "<!--"
+      root =
+        any(RegExpConstant term | term.getValue() = ["-->", "--!>", "<--", "<!--"]).getRootTerm()
     ) and
     ignorePrefix = true and
     (
@@ -40,7 +46,7 @@ module Make<RegexTreeViewSig TreeImpl> {
           "<script src='foo'></script>", "<SCRIPT>foo</SCRIPT>", "<script\tsrc=\"foo\"/>",
           "<script\tsrc='foo'></script>", "<sCrIpT>foo</ScRiPt>",
           "<script src=\"foo\">foo</script >", "<script src=\"foo\">foo</script foo=\"bar\">",
-          "<script src=\"foo\">foo</script\t\n bar>"
+          "<script src=\"foo\">foo</script\t\n bar>", "-->", "--!>", "--"
         ] and
       testWithGroups = false
     )
@@ -49,7 +55,7 @@ module Make<RegexTreeViewSig TreeImpl> {
   /**
    * A regexp that matches some string from the `isBadTagFilterCandidate` predicate.
    */
-  class HtmlMatchingRegExp instanceof RootTerm {
+  class HtmlMatchingRegExp extends RootTerm {
     HtmlMatchingRegExp() { RegexpMatching<isBadTagFilterCandidate/4>::matches(this, _) }
 
     /** Holds if this regexp matched `str`, where `str` is one of the string from `isBadTagFilterCandidate`. */
@@ -58,16 +64,6 @@ module Make<RegexTreeViewSig TreeImpl> {
     /** Holds if this regexp fills capture group `g' when matching `str', where `str` is one of the string from `isBadTagFilterCandidate`. */
     predicate fillsCaptureGroup(string str, int g) {
       RegexpMatching<isBadTagFilterCandidate/4>::fillsCaptureGroup(this, str, g)
-    }
-
-    /** Gets a string representation of this term. */
-    string toString() { result = super.toString() }
-
-    /** Holds if this term has the specified location. */
-    predicate hasLocationInfo(
-      string filepath, int startline, int startcolumn, int endline, int endcolumn
-    ) {
-      super.hasLocationInfo(filepath, startline, startcolumn, endline, endcolumn)
     }
   }
 
@@ -106,6 +102,12 @@ module Make<RegexTreeViewSig TreeImpl> {
         "This regular expression only parses --> (capture group " + group +
           ") and not --!> as an HTML comment end tag."
     )
+    or
+    // CVE-2021-4231 - matching only "-->" but not "--!>".
+    regexp.matches("-->") and
+    not regexp.matches("--!>") and
+    not regexp.matches("--") and
+    msg = "This regular expression only parses --> and not --!> as a HTML comment end tag."
     or
     regexp.matches("<!-- foo -->") and
     not regexp.matches("<!-- foo\n -->") and

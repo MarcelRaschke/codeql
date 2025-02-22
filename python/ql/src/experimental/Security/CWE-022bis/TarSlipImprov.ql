@@ -9,13 +9,14 @@
  * @security-severity 7.5
  * @precision high
  * @tags security
+ *       experimental
  *       external/cwe/cwe-022
  */
 
 import python
 import semmle.python.dataflow.new.DataFlow
 import semmle.python.dataflow.new.TaintTracking
-import DataFlow::PathGraph
+import TarSlipImprovFlow::PathGraph
 import semmle.python.ApiGraphs
 import semmle.python.dataflow.new.internal.Attributes
 import semmle.python.dataflow.new.BarrierGuards
@@ -53,12 +54,10 @@ class AllTarfileOpens extends API::CallNode {
 /**
  * A taint-tracking configuration for detecting more "TarSlip" vulnerabilities.
  */
-class Configuration extends TaintTracking::Configuration {
-  Configuration() { this = "TarSlip" }
+private module TarSlipImprovConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node source) { source = tarfileOpen().getACall() }
 
-  override predicate isSource(DataFlow::Node source) { source = tarfileOpen().getACall() }
-
-  override predicate isSink(DataFlow::Node sink) {
+  predicate isSink(DataFlow::Node sink) {
     (
       // A sink capturing method calls to `extractall` without `members` argument.
       // For a call to `file.extractall` without `members` argument, `file` is considered a sink.
@@ -99,24 +98,25 @@ class Configuration extends TaintTracking::Configuration {
     not sink.getScope().getLocation().getFile().inStdlib()
   }
 
-  override predicate isAdditionalTaintStep(DataFlow::Node nodeFrom, DataFlow::Node nodeTo) {
-    exists(AttrRead attr, MethodCallNode call |
-      attr.accesses(nodeFrom, "getmembers") and
-      nodeFrom = call.getObject() and
-      nodeFrom instanceof AllTarfileOpens and
-      nodeTo = call
-    )
+  predicate isAdditionalFlowStep(DataFlow::Node nodeFrom, DataFlow::Node nodeTo) {
+    nodeTo.(MethodCallNode).calls(nodeFrom, "getmembers") and
+    nodeFrom instanceof AllTarfileOpens
     or
-    exists(API::CallNode closing |
-      closing = API::moduleImport("contextlib").getMember("closing").getACall() and
-      nodeFrom = closing.getArg(0) and
-      nodeFrom = tarfileOpen().getReturn().getAValueReachingSink() and
-      nodeTo = closing
-    )
+    // To handle the case of `with closing(tarfile.open()) as file:`
+    // we add a step from the first argument of `closing` to the call to `closing`,
+    // whenever that first argument is a return of `tarfile.open()`.
+    nodeTo = API::moduleImport("contextlib").getMember("closing").getACall() and
+    nodeFrom = nodeTo.(API::CallNode).getArg(0) and
+    nodeFrom = tarfileOpen().getReturn().getAValueReachableFromSource()
   }
+
+  predicate observeDiffInformedIncrementalMode() { any() }
 }
 
-from Configuration config, DataFlow::PathNode source, DataFlow::PathNode sink
-where config.hasFlowPath(source, sink)
+/** Global taint-tracking for detecting more "TarSlip" vulnerabilities. */
+module TarSlipImprovFlow = TaintTracking::Global<TarSlipImprovConfig>;
+
+from TarSlipImprovFlow::PathNode source, TarSlipImprovFlow::PathNode sink
+where TarSlipImprovFlow::flowPath(source, sink)
 select sink, source, sink, "Extraction of tarfile from $@ to a potentially untrusted source $@.",
   source.getNode(), source.getNode().toString(), sink.getNode(), sink.getNode().toString()

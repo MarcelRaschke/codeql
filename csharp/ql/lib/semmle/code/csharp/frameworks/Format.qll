@@ -3,9 +3,9 @@
  */
 
 import csharp
+private import semmle.code.csharp.commons.Collections
 private import semmle.code.csharp.frameworks.System
 private import semmle.code.csharp.frameworks.system.Text
-private import semmle.code.csharp.dataflow.DataFlow2
 
 /** A method that formats a string, for example `string.Format()`. */
 class FormatMethod extends Method {
@@ -27,15 +27,15 @@ class FormatMethod extends Method {
         or
         (this.hasName("Write") or this.hasName("WriteLine")) and
         (
-          declType.hasQualifiedName("System", "Console")
+          declType.hasFullyQualifiedName("System", "Console")
           or
-          declType.hasQualifiedName("System.IO", "TextWriter")
+          declType.hasFullyQualifiedName("System.IO", "TextWriter")
           or
-          declType.hasQualifiedName("System.Diagnostics", "Debug") and
+          declType.hasFullyQualifiedName("System.Diagnostics", "Debug") and
           this.getParameter(1).getType() instanceof ArrayType
         )
         or
-        declType.hasQualifiedName("System.Diagnostics", "Trace") and
+        declType.hasFullyQualifiedName("System.Diagnostics", "Trace") and
         (
           this.hasName("TraceError") or
           this.hasName("TraceInformation") or
@@ -43,14 +43,14 @@ class FormatMethod extends Method {
         )
         or
         this.hasName("TraceInformation") and
-        declType.hasQualifiedName("System.Diagnostics", "TraceSource")
+        declType.hasFullyQualifiedName("System.Diagnostics", "TraceSource")
         or
         this.hasName("Print") and
-        declType.hasQualifiedName("System.Diagnostics", "Debug")
+        declType.hasFullyQualifiedName("System.Diagnostics", "Debug")
       )
       or
       this.hasName("Assert") and
-      declType.hasQualifiedName("System.Diagnostics", "Debug") and
+      declType.hasFullyQualifiedName("System.Diagnostics", "Debug") and
       this.getNumberOfParameters() = 4
     )
   }
@@ -65,7 +65,7 @@ class FormatMethod extends Method {
     else
       if
         this.hasName("Assert") and
-        this.getDeclaringType().hasQualifiedName("System.Diagnostics", "Debug")
+        this.getDeclaringType().hasFullyQualifiedName("System.Diagnostics", "Debug")
       then result = 2
       else result = 0
   }
@@ -107,7 +107,9 @@ class StringFormatItemParameter extends Parameter {
 }
 
 private Type getParameterType(Parameter p) {
-  if p.isParams() then result = p.getType().(ArrayType).getElementType() else result = p.getType()
+  if p.isParams()
+  then result = p.getType().(ParamsCollectionType).getElementType()
+  else result = p.getType()
 }
 
 /** Regex for a valid insert. */
@@ -134,7 +136,7 @@ class ValidFormatString extends StringLiteral {
     result = this.getValue().regexpFind(getValidFormatTokenRegex(), _, outPosition)
   }
 
-  /**Gets the insert number at the given position in the string. */
+  /** Gets the insert number at the given position in the string. */
   int getInsert(int position) {
     result = this.getToken(position).regexpCapture(getFormatInsertRegex(), 1).toInt()
   }

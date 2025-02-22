@@ -691,7 +691,7 @@ module PointsToInternal {
         sub.getObject() = sys_modules_flow and
         pointsTo(sys_modules_flow, _, ObjectInternal::sysModules(), _) and
         sub.getIndex() = n and
-        n.getNode().(StrConst).getText() = name and
+        n.getNode().(StringLiteral).getText() = name and
         sub.(DefinitionNode).getValue() = mod and
         pointsTo(mod, _, m, _)
       )
@@ -1026,8 +1026,8 @@ module InterProceduralPointsTo {
     ParameterDefinition def, PointsToContext context, ObjectInternal value, ControlFlowNode origin
   ) {
     def.isSelf() and
-    exists(CallNode call, BoundMethodObjectInternal method, Function func, PointsToContext caller |
-      callWithContext(call, caller, method, context) and
+    exists(BoundMethodObjectInternal method, Function func |
+      callWithContext(_, _, method, context) and
       func = method.getScope() and
       def.getScope() = func and
       value = method.getSelf() and
@@ -1062,8 +1062,8 @@ module InterProceduralPointsTo {
   private predicate context_for_default_value(ParameterDefinition def, PointsToContext context) {
     context.isRuntime() and exists(def)
     or
-    exists(PointsToContext caller, CallNode call, PythonFunctionObjectInternal func, int n |
-      context.fromCall(call, func, caller) and
+    exists(CallNode call, PythonFunctionObjectInternal func, int n |
+      context.fromCall(call, func, _) and
       func.getScope().getArg(n) = def.getParameter() and
       not exists(call.getArg(n)) and
       not exists(call.getArgByName(def.getVariable().getName())) and
@@ -1184,9 +1184,7 @@ module InterProceduralPointsTo {
     PointsToContext callee
   ) {
     PointsToInternal::pointsTo(argument, caller, _, _) and
-    exists(CallNode call, Function func, int offset |
-      callsite_calls_function(call, caller, func, callee, offset)
-    |
+    exists(CallNode call, Function func | callsite_calls_function(call, caller, func, callee, _) |
       exists(string name |
         argument = call.getArgByName(name) and
         function_parameter_name(func, param, name)
@@ -1447,23 +1445,14 @@ module Expressions {
     )
   }
 
-  deprecated predicate subscriptPointsTo(
-    SubscriptNode subscr, PointsToContext context, ObjectInternal value, ControlFlowNode origin,
-    ControlFlowNode obj, ObjectInternal objvalue
-  ) {
-    subscriptPointsTo(subscr, context, value, obj, objvalue) and
-    origin = subscr
-  }
-
   pragma[noinline]
   private predicate subscriptPointsTo(
     SubscriptNode subscr, PointsToContext context, ObjectInternal value, ControlFlowNode obj,
     ObjectInternal objvalue
   ) {
-    exists(ControlFlowNode index | subscriptObjectAndIndex(subscr, context, obj, objvalue, index) |
-      objvalue.subscriptUnknown() and
-      value = ObjectInternal::unknown()
-    )
+    subscriptObjectAndIndex(subscr, context, obj, objvalue, _) and
+    objvalue.subscriptUnknown() and
+    value = ObjectInternal::unknown()
     or
     exists(int n |
       subscriptObjectAndIndexPointsToInt(subscr, context, obj, objvalue, n) and
@@ -1492,14 +1481,6 @@ module Expressions {
     index = subscr.getIndex()
   }
 
-  deprecated predicate binaryPointsTo(
-    BinaryExprNode b, PointsToContext context, ObjectInternal value, ControlFlowNode origin,
-    ControlFlowNode operand, ObjectInternal opvalue
-  ) {
-    binaryPointsTo(b, context, value, operand, opvalue) and
-    origin = b
-  }
-
   /**
    * Tracking too many binary expressions is likely to kill performance, so just say anything other than addition or bitwise or is 'unknown'.
    */
@@ -1524,14 +1505,6 @@ module Expressions {
     )
   }
 
-  deprecated predicate addPointsTo(
-    BinaryExprNode b, PointsToContext context, ObjectInternal value, ControlFlowNode origin,
-    ControlFlowNode operand, ObjectInternal opvalue
-  ) {
-    addPointsTo(b, context, value, operand, opvalue) and
-    origin = b
-  }
-
   pragma[noinline]
   private predicate addPointsTo(
     BinaryExprNode b, PointsToContext context, ObjectInternal value, ControlFlowNode operand,
@@ -1548,14 +1521,6 @@ module Expressions {
     )
   }
 
-  deprecated predicate bitOrPointsTo(
-    BinaryExprNode b, PointsToContext context, ObjectInternal value, ControlFlowNode origin,
-    ControlFlowNode operand, ObjectInternal opvalue
-  ) {
-    bitOrPointsTo(b, context, value, operand, opvalue) and
-    origin = b
-  }
-
   pragma[noinline]
   private predicate bitOrPointsTo(
     BinaryExprNode b, PointsToContext context, ObjectInternal value, ControlFlowNode operand,
@@ -1567,9 +1532,9 @@ module Expressions {
       b.operands(other, op, operand)
     |
       op instanceof BitOr and
-      exists(ObjectInternal obj, int i1, int i2 |
+      exists(int i1, int i2 |
         pointsToInt(operand, context, opvalue, i1) and
-        pointsToInt(other, context, obj, i2) and
+        pointsToInt(other, context, _, i2) and
         value = TInt(i1.bitOr(i2))
       )
     )
@@ -1578,14 +1543,6 @@ module Expressions {
   predicate pointsToInt(ControlFlowNode n, PointsToContext context, ObjectInternal obj, int value) {
     PointsToInternal::pointsTo(n, context, obj, _) and
     value = obj.intValue()
-  }
-
-  deprecated predicate unaryPointsTo(
-    UnaryExprNode u, PointsToContext context, ObjectInternal value, ControlFlowNode origin,
-    ControlFlowNode operand, ObjectInternal opvalue
-  ) {
-    unaryPointsTo(u, context, value, operand, opvalue) and
-    origin = u
   }
 
   pragma[noinline]
@@ -1604,14 +1561,6 @@ module Expressions {
       or
       not op instanceof Not and opvalue = ObjectInternal::unknown() and value = opvalue
     )
-  }
-
-  deprecated predicate builtinCallPointsTo(
-    CallNode call, PointsToContext context, ObjectInternal value, ControlFlowNode origin,
-    ControlFlowNode arg, ObjectInternal argvalue
-  ) {
-    builtinCallPointsTo(call, context, value, arg, argvalue) and
-    origin = call
   }
 
   pragma[noinline]
@@ -2071,7 +2020,7 @@ module Expressions {
     exists(ObjectInternal sup_or_tuple |
       issubclass_call(_, _, _, sub, sup_or_tuple) and sub.isClass() = true
       or
-      exists(ObjectInternal val | isinstance_call(_, _, _, val, sub, sup_or_tuple))
+      isinstance_call(_, _, _, _, sub, sup_or_tuple)
     |
       sup = sup_or_tuple
       or
@@ -2569,7 +2518,7 @@ module AttributePointsTo {
   predicate variableAttributePointsTo(
     EssaVariable var, Context context, string name, ObjectInternal value, CfgOrigin origin
   ) {
-    Stages::DataFlow::ref() and
+    Stages::PointsTo::ref() and
     definitionAttributePointsTo(var.getDefinition(), context, name, value, origin)
     or
     exists(EssaVariable prev |
@@ -2759,8 +2708,8 @@ module ModuleAttributes {
     )
     or
     /* Retain value held before import */
-    exists(ModuleObjectInternal mod, EssaVariable input |
-      importStarDef(def, input, mod) and
+    exists(ModuleObjectInternal mod |
+      importStarDef(def, _, mod) and
       (InterModulePointsTo::moduleExportsBoolean(mod, name) = false or name.charAt(0) = "_") and
       attributePointsTo(def.getInput(), name, value, origin)
     )
@@ -2787,8 +2736,8 @@ module ModuleAttributes {
     CallsiteRefinement def, string name, ObjectInternal value, CfgOrigin origin
   ) {
     def.getVariable().isMetaVariable() and
-    exists(EssaVariable var, Function func, PointsToContext callee |
-      InterProceduralPointsTo::callsite_calls_function(def.getCall(), _, func, callee, _) and
+    exists(EssaVariable var, Function func |
+      InterProceduralPointsTo::callsite_calls_function(def.getCall(), _, func, _, _) and
       var = moduleStateVariable(func.getANormalExit()) and
       attributePointsTo(var, name, value, origin)
     )

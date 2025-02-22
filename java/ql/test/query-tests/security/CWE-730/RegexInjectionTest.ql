@@ -1,20 +1,18 @@
 import java
-import TestUtilities.InlineExpectationsTest
+import utils.test.InlineExpectationsTest
 import semmle.code.java.security.regexp.RegexInjectionQuery
 
-class RegexInjectionTest extends InlineExpectationsTest {
-  RegexInjectionTest() { this = "RegexInjectionTest" }
+module RegexInjectionTest implements TestSig {
+  string getARelevantTag() { result = "hasRegexInjection" }
 
-  override string getARelevantTag() { result = "hasRegexInjection" }
-
-  override predicate hasActualResult(Location location, string element, string tag, string value) {
+  predicate hasActualResult(Location location, string element, string tag, string value) {
     tag = "hasRegexInjection" and
-    exists(DataFlow::PathNode source, DataFlow::PathNode sink, RegexInjectionConfiguration c |
-      c.hasFlowPath(source, sink)
-    |
+    exists(RegexInjectionFlow::PathNode sink | RegexInjectionFlow::flowPath(_, sink) |
       location = sink.getNode().getLocation() and
       element = sink.getNode().toString() and
       value = ""
     )
   }
 }
+
+import MakeTest<RegexInjectionTest>

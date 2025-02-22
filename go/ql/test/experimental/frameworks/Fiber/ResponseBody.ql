@@ -1,13 +1,11 @@
 import go
-import TestUtilities.InlineExpectationsTest
+import utils.test.InlineExpectationsTest
 import experimental.frameworks.Fiber
 
-class HttpResponseBodyTest extends InlineExpectationsTest {
-  HttpResponseBodyTest() { this = "HttpResponseBodyTest" }
+module HttpResponseBodyTest implements TestSig {
+  string getARelevantTag() { result = ["contentType", "responseBody"] }
 
-  override string getARelevantTag() { result = ["contentType", "responseBody"] }
-
-  override predicate hasActualResult(Location location, string element, string tag, string value) {
+  predicate hasActualResult(Location location, string element, string tag, string value) {
     exists(Http::ResponseBody rd |
       rd.hasLocationInfo(location.getFile().getAbsolutePath(), location.getStartLine(),
         location.getStartColumn(), location.getEndLine(), location.getEndColumn()) and
@@ -23,3 +21,5 @@ class HttpResponseBodyTest extends InlineExpectationsTest {
     )
   }
 }
+
+import MakeTest<HttpResponseBodyTest>

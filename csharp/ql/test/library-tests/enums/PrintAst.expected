@@ -11,35 +11,25 @@ enums.cs:
 #   23|   3: [Enum] E
 #   25|   4: [Enum] ValueColor
 #   28|     5: [Field] OneRed
-#   28|       1: [AssignExpr] ... = ...
-#   28|         0: [MemberConstantAccess] access to constant OneRed
-#   28|         1: [CastExpr] (...) ...
-#   28|           1: [IntLiteral] 1
+#   28|       1: [CastExpr] (...) ...
+#   28|         1: [IntLiteral] 1
 #   29|     6: [Field] TwoGreen
-#   29|       1: [AssignExpr] ... = ...
-#   29|         0: [MemberConstantAccess] access to constant TwoGreen
-#   29|         1: [CastExpr] (...) ...
-#   29|           1: [IntLiteral] 2
+#   29|       1: [CastExpr] (...) ...
+#   29|         1: [IntLiteral] 2
 #   30|     7: [Field] FourBlue
-#   30|       1: [AssignExpr] ... = ...
-#   30|         0: [MemberConstantAccess] access to constant FourBlue
-#   30|         1: [CastExpr] (...) ...
-#   30|           1: [IntLiteral] 4
+#   30|       1: [CastExpr] (...) ...
+#   30|         1: [IntLiteral] 4
 #   34|   5: [Enum] SparseColor
 #   37|     5: [Field] Red
 #   38|     6: [Field] Green
-#   38|       1: [AssignExpr] ... = ...
-#   38|         0: [MemberConstantAccess] access to constant Green
-#   38|         1: [IntLiteral] 10
+#   38|       1: [IntLiteral] 10
 #   39|     7: [Field] Blue
 #   40|     8: [Field] AnotherBlue
-#   40|       1: [AssignExpr] ... = ...
-#   40|         0: [MemberConstantAccess] access to constant AnotherBlue
-#   40|         1: [AddExpr] ... + ...
-#   40|           0: [CastExpr] (...) ...
-#   40|             1: [MemberConstantAccess] access to constant Blue
-#   40|           1: [CastExpr] (...) ...
-#   40|             1: [MemberConstantAccess] access to constant Red
+#   40|       1: [AddExpr] ... + ...
+#   40|         0: [CastExpr] (...) ...
+#   40|           1: [MemberConstantAccess] access to constant Blue
+#   40|         1: [CastExpr] (...) ...
+#   40|           1: [MemberConstantAccess] access to constant Red
 #   44|   6: [Class] Test
 #   47|     5: [Method] Main
 #   47|       -1: [TypeMention] Void
@@ -84,7 +74,7 @@ enums.cs:
 #   58|             0: [MethodCall] call to method Format
 #   58|               -1: [TypeAccess] access to type String
 #   58|                 0: [TypeMention] string
-#   58|               0: [StringLiteral] "Red = {0}"
+#   58|               0: [StringLiteralUtf16] "Red = {0}"
 #   58|               1: [CastExpr] (...) ...
 #   58|                 1: [CastExpr] (...) ...
 #   58|                   0: [TypeAccess] access to type Int32
@@ -98,7 +88,7 @@ enums.cs:
 #   59|             0: [MethodCall] call to method Format
 #   59|               -1: [TypeAccess] access to type String
 #   59|                 0: [TypeMention] string
-#   59|               0: [StringLiteral] "Green = {0}"
+#   59|               0: [StringLiteralUtf16] "Green = {0}"
 #   59|               1: [CastExpr] (...) ...
 #   59|                 1: [CastExpr] (...) ...
 #   59|                   0: [TypeAccess] access to type Int32
@@ -112,7 +102,7 @@ enums.cs:
 #   60|             0: [MethodCall] call to method Format
 #   60|               -1: [TypeAccess] access to type String
 #   60|                 0: [TypeMention] string
-#   60|               0: [StringLiteral] "Blue = {0}"
+#   60|               0: [StringLiteralUtf16] "Blue = {0}"
 #   60|               1: [CastExpr] (...) ...
 #   60|                 1: [CastExpr] (...) ...
 #   60|                   0: [TypeAccess] access to type Int32
@@ -120,4 +110,4 @@ enums.cs:
 #   60|                   1: [ParameterAccess] access to parameter c
 #   61|           6: [DefaultCase] default:
 #   61|           7: [ReturnStmt] return ...;
-#   61|             0: [StringLiteral] "Invalid color"
+#   61|             0: [StringLiteralUtf16] "Invalid color"

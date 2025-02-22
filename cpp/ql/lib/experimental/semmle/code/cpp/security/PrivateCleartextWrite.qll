@@ -3,7 +3,7 @@
  */
 
 import cpp
-import semmle.code.cpp.dataflow.TaintTracking
+import semmle.code.cpp.ir.dataflow.TaintTracking
 import semmle.code.cpp.security.PrivateData
 import semmle.code.cpp.security.FileWrite
 import semmle.code.cpp.security.BufferWrite
@@ -36,15 +36,15 @@ module PrivateCleartextWrite {
     }
   }
 
-  class WriteConfig extends TaintTracking::Configuration {
-    WriteConfig() { this = "Write configuration" }
+  private module WriteConfig implements DataFlow::ConfigSig {
+    predicate isSource(DataFlow::Node source) { source instanceof Source }
 
-    override predicate isSource(DataFlow::Node source) { source instanceof Source }
+    predicate isSink(DataFlow::Node sink) { sink instanceof Sink }
 
-    override predicate isSink(DataFlow::Node sink) { sink instanceof Sink }
-
-    override predicate isSanitizer(DataFlow::Node node) { node instanceof Sanitizer }
+    predicate isBarrier(DataFlow::Node node) { node instanceof Sanitizer }
   }
+
+  module WriteFlow = TaintTracking::Global<WriteConfig>;
 
   class PrivateDataSource extends Source {
     PrivateDataSource() { this.getExpr() instanceof PrivateDataExpr }

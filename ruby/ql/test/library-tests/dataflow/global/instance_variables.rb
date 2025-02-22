@@ -27,11 +27,26 @@ class Foo
     def call_initialize(field)
         initialize(field)
     end
+
+    def self.bar x
+        new(taint(36))
+        new(x)
+    end
+
+    sink(new(taint(34)).get_field) # $ hasValueFlow=34
 end
+
+sink(Foo.bar(taint(35)).get_field) # $ hasValueFlow=35
 
 class Bar < Foo
     def self.new arg
         taint(32)
+    end
+end
+
+class Baz < Foo
+    def initialize x
+        sink x # $ hasValueFlow=36
     end
 end
 
@@ -55,7 +70,7 @@ foo3 = Foo.new
 foo3.set_field(taint(22))
 sink(foo3.field) # $ hasValueFlow=22
 
-foo4 = "hello"
+foo4 = 4
 foo4.other = taint(23)
 sink(foo4.other) # no field flow for constants
 

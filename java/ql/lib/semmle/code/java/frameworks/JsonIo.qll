@@ -5,7 +5,6 @@
 import java
 import semmle.code.java.Maps
 import semmle.code.java.dataflow.DataFlow
-import semmle.code.java.dataflow.DataFlow2
 
 /**
  * The class `com.cedarsoftware.util.io.JsonReader`.
@@ -33,7 +32,7 @@ class JsonIoReadObjectMethod extends Method {
 /**
  * A call to `Map.put` method, set the value of the `USE_MAPS` key to `true`.
  */
-class JsonIoUseMapsSetter extends MethodAccess {
+class JsonIoUseMapsSetter extends MethodCall {
   JsonIoUseMapsSetter() {
     this.getMethod().getDeclaringType().getASourceSupertype*() instanceof MapType and
     this.getMethod().hasName("put") and
@@ -42,19 +41,19 @@ class JsonIoUseMapsSetter extends MethodAccess {
   }
 }
 
-/** A data flow configuration tracing flow from JsonIo safe settings. */
-class SafeJsonIoConfig extends DataFlow2::Configuration {
-  SafeJsonIoConfig() { this = "UnsafeDeserialization::SafeJsonIoConfig" }
-
-  override predicate isSource(DataFlow::Node src) {
-    exists(MethodAccess ma |
+/**
+ * A data flow configuration tracing flow from JsonIo safe settings.
+ */
+module SafeJsonIoConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node src) {
+    exists(MethodCall ma |
       ma instanceof JsonIoUseMapsSetter and
       src.asExpr() = ma.getQualifier()
     )
   }
 
-  override predicate isSink(DataFlow::Node sink) {
-    exists(MethodAccess ma |
+  predicate isSink(DataFlow::Node sink) {
+    exists(MethodCall ma |
       ma.getMethod() instanceof JsonIoJsonToJavaMethod and
       sink.asExpr() = ma.getArgument(1)
     )
@@ -65,3 +64,6 @@ class SafeJsonIoConfig extends DataFlow2::Configuration {
     )
   }
 }
+
+/** Tracks flow from JsonIo safe settings. */
+module SafeJsonIoFlow = DataFlow::Global<SafeJsonIoConfig>;

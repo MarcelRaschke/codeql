@@ -3,18 +3,19 @@
  * @description A list of external libraries used in the code given by their namespace.
  * @kind metric
  * @tags summary telemetry
- * @id csharp/telemetry/external-libs
+ * @id cs/telemetry/external-libs
  */
 
 private import csharp
 private import semmle.code.csharp.dispatch.Dispatch
-private import ExternalApi
+private import semmle.code.csharp.telemetry.ExternalApi
 
 private predicate getRelevantUsages(string namespace, int usages) {
   usages =
     strictcount(Call c, ExternalApi api |
       c.getTarget().getUnboundDeclaration() = api and
-      api.getNamespace() = namespace
+      api.getNamespace() = namespace and
+      c.fromSource()
     )
 }
 

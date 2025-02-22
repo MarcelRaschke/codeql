@@ -1,7 +1,7 @@
 /**
- * @name Overflow in uncontrolled allocation size
- * @description Allocating memory with a size controlled by an external
- *              user can result in integer overflow.
+ * @name Uncontrolled allocation size
+ * @description Allocating memory with a size controlled by an external user can result in
+ *              arbitrary amounts of memory being allocated.
  * @kind path-problem
  * @problem.severity error
  * @security-severity 8.1
@@ -19,22 +19,23 @@ import semmle.code.cpp.ir.dataflow.TaintTracking
 import semmle.code.cpp.ir.IR
 import semmle.code.cpp.controlflow.IRGuards
 import semmle.code.cpp.security.FlowSources
-import DataFlow::PathGraph
+import TaintedAllocationSize::PathGraph
+import Bounded
 
 /**
  * Holds if `alloc` is an allocation, and `tainted` is a child of it that is a
  * taint sink.
  */
-predicate allocSink(Expr alloc, DataFlow::Node sink) {
-  exists(Expr e | e = sink.asConvertedExpr() |
-    isAllocationExpr(alloc) and
+predicate allocSink(HeuristicAllocationExpr alloc, DataFlow::Node sink) {
+  exists(Expr e | e = sink.asExpr() |
     e = alloc.getAChild() and
     e.getUnspecifiedType() instanceof IntegralType
   )
 }
 
-predicate readsVariable(LoadInstruction load, Variable var) {
-  load.getSourceAddress().(VariableAddressInstruction).getAstVariable() = var
+predicate readsVariable(LoadInstruction load, Variable var, IRBlock bb) {
+  load.getSourceAddress().(VariableAddressInstruction).getAstVariable() = var and
+  bb = load.getBlock()
 }
 
 predicate hasUpperBoundsCheck(Variable var) {
@@ -46,32 +47,31 @@ predicate hasUpperBoundsCheck(Variable var) {
   )
 }
 
-predicate nodeIsBarrierEqualityCandidate(DataFlow::Node node, Operand access, Variable checkedVar) {
-  readsVariable(node.asInstruction(), checkedVar) and
-  any(IRGuardCondition guard).ensuresEq(access, _, _, node.asInstruction().getBlock(), true)
+predicate variableEqualityCheckedInBlock(Variable checkedVar, IRBlock bb) {
+  exists(Operand access |
+    readsVariable(access.getDef(), checkedVar, _) and
+    any(IRGuardCondition guard).ensuresEq(access, _, _, bb, true)
+  )
+}
+
+predicate nodeIsBarrierEquality(DataFlow::Node node) {
+  exists(Variable checkedVar, Instruction instr, IRBlock bb |
+    instr = node.asOperand().getDef() and
+    readsVariable(instr, checkedVar, bb) and
+    variableEqualityCheckedInBlock(checkedVar, bb)
+  )
 }
 
 predicate isFlowSource(FlowSource source, string sourceType) { sourceType = source.getSourceType() }
 
-class TaintedAllocationSizeConfiguration extends TaintTracking::Configuration {
-  TaintedAllocationSizeConfiguration() { this = "TaintedAllocationSizeConfiguration" }
+module TaintedAllocationSizeConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node source) { isFlowSource(source, _) }
 
-  override predicate isSource(DataFlow::Node source) { isFlowSource(source, _) }
+  predicate isSink(DataFlow::Node sink) { allocSink(_, sink) }
 
-  override predicate isSink(DataFlow::Node sink) { allocSink(_, sink) }
-
-  override predicate isSanitizer(DataFlow::Node node) {
+  predicate isBarrier(DataFlow::Node node) {
     exists(Expr e | e = node.asExpr() |
-      // There can be two separate reasons for `convertedExprMightOverflow` not holding:
-      // 1. `e` really cannot overflow.
-      // 2. `e` isn't analyzable.
-      // If we didn't rule out case 2 we would place barriers on anything that isn't analyzable.
-      (
-        e instanceof UnaryArithmeticOperation or
-        e instanceof BinaryArithmeticOperation or
-        e instanceof AssignArithmeticOperation
-      ) and
-      not convertedExprMightOverflow(e)
+      bounded(e)
       or
       // Subtracting two pointers is either well-defined (and the result will likely be small), or
       // terribly undefined and dangerous. Here, we assume that the programmer has ensured that the
@@ -80,24 +80,28 @@ class TaintedAllocationSizeConfiguration extends TaintTracking::Configuration {
       e = any(PointerDiffExpr diff).getAnOperand()
     )
     or
-    exists(Variable checkedVar |
-      readsVariable(node.asInstruction(), checkedVar) and
+    exists(Variable checkedVar, Instruction instr | instr = node.asOperand().getDef() |
+      readsVariable(instr, checkedVar, _) and
       hasUpperBoundsCheck(checkedVar)
     )
     or
-    exists(Variable checkedVar, Operand access |
-      readsVariable(access.getDef(), checkedVar) and
-      nodeIsBarrierEqualityCandidate(node, access, checkedVar)
-    )
+    nodeIsBarrierEquality(node)
+    or
+    // block flow to inside of identified allocation functions (this flow leads
+    // to duplicate results)
+    any(HeuristicAllocationFunction f).getAParameter() = node.asParameter()
   }
 }
 
+module TaintedAllocationSize = TaintTracking::Global<TaintedAllocationSizeConfig>;
+
 from
-  Expr alloc, DataFlow::PathNode source, DataFlow::PathNode sink, string taintCause,
-  TaintedAllocationSizeConfiguration conf
+  Expr alloc, TaintedAllocationSize::PathNode source, TaintedAllocationSize::PathNode sink,
+  string taintCause
 where
   isFlowSource(source.getNode(), taintCause) and
-  conf.hasFlowPath(source, sink) and
+  TaintedAllocationSize::flowPath(source, sink) and
   allocSink(alloc, sink.getNode())
-select alloc, source, sink, "This allocation size is derived from $@ and might overflow.",
+select alloc, source, sink,
+  "This allocation size is derived from $@ and could allocate arbitrary amounts of memory.",
   source.getNode(), "user input (" + taintCause + ")"

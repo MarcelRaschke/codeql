@@ -192,13 +192,18 @@ private predicate typePrefixContains_ext_neq(ParameterizedPrefix pps, Parameteri
 }
 
 pragma[nomagic]
+private TTypeParam parameterizedPrefixWithWildcard(ParameterizedPrefix pps0, Wildcard s) {
+  result = TTypeParam(pps0, s)
+}
+
+pragma[nomagic]
 private predicate typePrefixContainsAux1(
   ParameterizedPrefix pps, ParameterizedPrefix ppt0, RefType s
 ) {
   exists(ParameterizedPrefix pps0 |
     typePrefixContains(pps0, ppt0) and
-    pps = TTypeParam(pps0, s) and
-    s instanceof Wildcard // manual magic, implied by `typeArgumentContains(_, s, t, _)`
+    // `s instanceof Wildcard` is manual magic, implied by `typeArgumentContains(_, s, t, _)`
+    pps = parameterizedPrefixWithWildcard(pps0, s)
   )
 }
 
@@ -304,7 +309,6 @@ private predicate hasSubtypeStar1(RefType t, RefType sub) {
 /**
  * Holds if `hasSubtype*(t, sub)`, but manual-magic'ed with `getAWildcardLowerBound(sub)`.
  */
-pragma[assume_small_delta]
 pragma[nomagic]
 private predicate hasSubtypeStar2(RefType t, RefType sub) {
   sub = t and getAWildcardLowerBound(sub)
@@ -320,7 +324,7 @@ predicate declaresMember(Type t, @member m) {
   or
   constrs(m, _, _, _, t, _)
   or
-  fields(m, _, _, t, _)
+  fields(m, _, _, t)
   or
   enclInReftype(m, t) and
   // Since the type `@member` in the dbscheme includes all `@reftype`s,
@@ -385,10 +389,7 @@ class Array extends RefType, @array {
  */
 class RefType extends Type, Annotatable, Modifiable, @reftype {
   /** Gets the package in which this type is declared. */
-  Package getPackage() {
-    classes(this, _, result, _) or
-    interfaces(this, _, result, _)
-  }
+  Package getPackage() { classes_or_interfaces(this, _, result, _) }
 
   /** Gets the type in which this reference type is enclosed, if any. */
   RefType getEnclosingType() { enclInReftype(this, result) }
@@ -416,7 +417,7 @@ class RefType extends Type, Annotatable, Modifiable, @reftype {
 
   /**
    * Gets a direct or indirect supertype of this type.
-   * This does not including itself, unless this type is part of a cycle
+   * This does not include itself, unless this type is part of a cycle
    * in the type hierarchy.
    */
   RefType getAStrictAncestor() { result = this.getASupertype().getAnAncestor() }
@@ -591,7 +592,7 @@ class RefType extends Type, Annotatable, Modifiable, @reftype {
    * to the name of the enclosing type, which might be a nested type as well.
    */
   predicate hasQualifiedName(string package, string type) {
-    this.getPackage().hasName(package) and type = this.nestedName()
+    this.getPackage().hasName(package) and type = this.getNestedName()
   }
 
   /**
@@ -600,7 +601,7 @@ class RefType extends Type, Annotatable, Modifiable, @reftype {
   override string getTypeDescriptor() {
     result =
       "L" + this.getPackage().getName().replaceAll(".", "/") + "/" +
-        this.getSourceDeclaration().nestedName() + ";"
+        this.getSourceDeclaration().getNestedName() + ";"
   }
 
   /**
@@ -614,8 +615,8 @@ class RefType extends Type, Annotatable, Modifiable, @reftype {
   string getQualifiedName() {
     exists(string pkgName | pkgName = this.getPackage().getName() |
       if pkgName = ""
-      then result = this.nestedName()
-      else result = pkgName + "." + this.nestedName()
+      then result = this.getNestedName()
+      else result = pkgName + "." + this.getNestedName()
     )
   }
 
@@ -626,11 +627,14 @@ class RefType extends Type, Annotatable, Modifiable, @reftype {
    * Otherwise the name of the nested type is prefixed with a `$` and appended to
    * the name of the enclosing type, which might be a nested type as well.
    */
-  string nestedName() {
+  string getNestedName() {
     not this instanceof NestedType and result = this.getName()
     or
-    this.(NestedType).getEnclosingType().nestedName() + "$" + this.getName() = result
+    this.(NestedType).getEnclosingType().getNestedName() + "$" + this.getName() = result
   }
+
+  /** DEPRECATED: Alias for `getNestedName`. */
+  deprecated string nestedName() { result = this.getNestedName() }
 
   /**
    * Gets the source declaration of this type.
@@ -685,11 +689,11 @@ class SrcRefType extends RefType {
 }
 
 /** A class declaration. */
-class Class extends ClassOrInterface, @class {
+class Class extends ClassOrInterface {
+  Class() { not isInterface(this) }
+
   /** Holds if this class is an anonymous class. */
   predicate isAnonymous() { isAnonymClass(this.getSourceDeclaration(), _) }
-
-  override RefType getSourceDeclaration() { classes(this, _, _, result) }
 
   /**
    * Gets an annotation that applies to this class.
@@ -707,6 +711,12 @@ class Class extends ClassOrInterface, @class {
       result = this.getASupertype().(Class).getAnAnnotation()
     )
   }
+
+  /**
+   * Holds if this class is a Kotlin "file class", e.g. the class FooKt
+   * for top-level entities in Foo.kt.
+   */
+  predicate isFileClass() { file_class(this) }
 
   override string getAPrimaryQlClass() { result = "Class" }
 }
@@ -739,13 +749,20 @@ class DataClass extends Class {
  */
 class Record extends Class {
   Record() { isRecord(this) }
+
+  /**
+   * Gets the canonical constructor of this record.
+   */
+  Constructor getCanonicalConstructor() {
+    result = this.getAConstructor() and isCanonicalConstr(result)
+  }
 }
 
 /** An intersection type. */
-class IntersectionType extends RefType, @class {
+class IntersectionType extends RefType, @classorinterface {
   IntersectionType() {
     exists(string shortname |
-      classes(this, shortname, _, _) and
+      classes_or_interfaces(this, shortname, _, _) and
       shortname.matches("% & ...")
     )
   }
@@ -807,7 +824,9 @@ class AnonymousClass extends NestedClass {
     // Include super.toString, i.e. the name given in the database, because for Kotlin anonymous
     // classes we can get specialisations of anonymous generic types, and this will supply the
     // trailing type arguments.
-    result = "new " + this.getClassInstanceExpr().getTypeName() + "(...) { ... }" + super.toString()
+    result =
+      "new " + pragma[only_bind_out](this.getClassInstanceExpr().getTypeName()).toString() +
+        "(...) { ... }" + super.toString()
   }
 
   /**
@@ -842,7 +861,7 @@ class LocalClass extends LocalClassOrInterface, NestedClass {
 class TopLevelType extends RefType {
   TopLevelType() {
     not enclInReftype(this, _) and
-    (this instanceof Class or this instanceof Interface)
+    this instanceof ClassOrInterface
   }
 }
 
@@ -940,8 +959,8 @@ class InnerClass extends NestedClass {
 }
 
 /** An interface. */
-class Interface extends ClassOrInterface, @interface {
-  override RefType getSourceDeclaration() { interfaces(this, _, _, result) }
+class Interface extends ClassOrInterface {
+  Interface() { isInterface(this) }
 
   override predicate isAbstract() {
     // JLS 9.1.1.1: "Every interface is implicitly abstract"
@@ -953,6 +972,8 @@ class Interface extends ClassOrInterface, @interface {
 
 /** A class or interface. */
 class ClassOrInterface extends RefType, @classorinterface {
+  override RefType getSourceDeclaration() { classes_or_interfaces(this, _, _, result) }
+
   /** Holds if this class or interface is local. */
   predicate isLocal() { isLocalClassOrInterface(this.getSourceDeclaration(), _) }
 
@@ -981,6 +1002,17 @@ private string getAPublicObjectMethodSignature() {
   )
 }
 
+pragma[nomagic]
+private predicate interfaceInheritsOverridingNonAbstractMethod(Interface interface, Method m) {
+  interface.inherits(m) and
+  not m.isAbstract() and
+  m.overrides(_)
+}
+
+bindingset[m]
+pragma[inline_late]
+private Method getAnOverridden(Method m) { m.overrides(result) }
+
 private Method getAnAbstractMethod(Interface interface) {
   interface.inherits(result) and
   result.isAbstract() and
@@ -989,9 +1021,8 @@ private Method getAnAbstractMethod(Interface interface) {
   // Make sure that there is no other non-abstract method
   // (e.g. `default`) which overrides the abstract one
   not exists(Method m |
-    interface.inherits(m) and
-    not m.isAbstract() and
-    m.overrides(result)
+    interfaceInheritsOverridingNonAbstractMethod(interface, m) and
+    result = getAnOverridden(m)
   )
 }
 
@@ -1067,6 +1098,24 @@ class PrimitiveType extends Type, @primitive {
   }
 
   override string getAPrimaryQlClass() { result = "PrimitiveType" }
+}
+
+private int getByteSize(PrimitiveType t) {
+  t.hasName("boolean") and result = 1
+  or
+  t.hasName("byte") and result = 1
+  or
+  t.hasName("char") and result = 2
+  or
+  t.hasName("short") and result = 2
+  or
+  t.hasName("int") and result = 4
+  or
+  t.hasName("float") and result = 4
+  or
+  t.hasName("long") and result = 8
+  or
+  t.hasName("double") and result = 8
 }
 
 /** The type of the `null` literal. */
@@ -1146,12 +1195,10 @@ class EnumType extends Class {
   EnumType() { isEnumType(this) }
 
   /** Gets the enum constant with the specified name. */
-  EnumConstant getEnumConstant(string name) {
-    fields(result, _, _, this, _) and result.hasName(name)
-  }
+  EnumConstant getEnumConstant(string name) { fields(result, _, _, this) and result.hasName(name) }
 
   /** Gets an enum constant declared in this enum type. */
-  EnumConstant getAnEnumConstant() { fields(result, _, _, this, _) }
+  EnumConstant getAnEnumConstant() { fields(result, _, _, this) }
 
   override predicate isFinal() {
     // JLS 8.9: An enum declaration is implicitly `final` unless it contains
@@ -1240,6 +1287,7 @@ predicate notHaveIntersection(RefType t1, RefType t2) {
  * Holds if there is a common (reflexive, transitive) subtype of the erased
  * types `t1` and `t2`.
  */
+pragma[nomagic]
 predicate erasedHaveIntersection(RefType t1, RefType t2) {
   exists(SrcRefType commonSub |
     commonSub.getASourceSupertype*() = t1 and commonSub.getASourceSupertype*() = t2
@@ -1259,6 +1307,12 @@ class IntegralType extends Type {
     |
       name = ["byte", "char", "short", "int", "long"]
     )
+  }
+
+  /** Gets the size in bytes of this numeric type. */
+  final int getByteSize() {
+    result = getByteSize(this) or
+    result = getByteSize(this.(BoxedType).getPrimitiveType())
   }
 }
 

@@ -1,20 +1,18 @@
 import java
 import semmle.code.java.security.MissingJWTSignatureCheckQuery
-import TestUtilities.InlineExpectationsTest
+import utils.test.InlineExpectationsTest
 
-class HasMissingJwtSignatureCheckTest extends InlineExpectationsTest {
-  HasMissingJwtSignatureCheckTest() { this = "HasMissingJwtSignatureCheckTest" }
+module HasMissingJwtSignatureCheckTest implements TestSig {
+  string getARelevantTag() { result = "hasMissingJwtSignatureCheck" }
 
-  override string getARelevantTag() { result = "hasMissingJwtSignatureCheck" }
-
-  override predicate hasActualResult(Location location, string element, string tag, string value) {
+  predicate hasActualResult(Location location, string element, string tag, string value) {
     tag = "hasMissingJwtSignatureCheck" and
-    exists(DataFlow::Node source, DataFlow::Node sink, MissingJwtSignatureCheckConf conf |
-      conf.hasFlow(source, sink)
-    |
+    exists(DataFlow::Node sink | MissingJwtSignatureCheckFlow::flowTo(sink) |
       sink.getLocation() = location and
       element = sink.toString() and
       value = ""
     )
   }
 }
+
+import MakeTest<HasMissingJwtSignatureCheckTest>

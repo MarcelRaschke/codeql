@@ -4,7 +4,6 @@
 
 private import codeql.ruby.AST
 private import codeql.ruby.DataFlow
-private import codeql.ruby.DataFlow2
 private import codeql.ruby.CFG
 private import codeql.ruby.Concepts
 private import codeql.ruby.Frameworks
@@ -36,13 +35,6 @@ private module Shared {
    */
   abstract class Sanitizer extends DataFlow::Node { }
 
-  /**
-   * DEPRECATED: Use `Sanitizer` instead.
-   *
-   * A sanitizer guard for "server-side cross-site scripting" vulnerabilities.
-   */
-  abstract deprecated class SanitizerGuard extends DataFlow::BarrierGuard { }
-
   private class ErbOutputMethodCallArgumentNode extends DataFlow::Node {
     private MethodCall call;
 
@@ -54,6 +46,18 @@ private module Shared {
     }
 
     MethodCall getCall() { result = call }
+  }
+
+  /**
+   * A value interpolated using a raw erb output directive, which does not perform HTML escaping.
+   * ```erb
+   * <%== sink %>
+   * ```
+   */
+  class ErbRawOutputDirective extends Sink {
+    ErbRawOutputDirective() {
+      exists(ErbOutputDirective d | d.isRaw() | this.asExpr().getExpr() = d.getTerminalStmt())
+    }
   }
 
   /**
@@ -90,7 +94,8 @@ private module Shared {
    * tag.
    */
   class ArgumentInterpretedAsUrlAsSink extends Sink, ErbOutputMethodCallArgumentNode,
-    ActionView::ArgumentInterpretedAsUrl { }
+    ActionView::ArgumentInterpretedAsUrl
+  { }
 
   /**
    * A argument to a call to the `link_to` method, which does not expect
@@ -129,13 +134,15 @@ private module Shared {
    * An inclusion check against an array of constant strings, considered as a sanitizer-guard.
    */
   class StringConstArrayInclusionCallAsSanitizer extends Sanitizer,
-    StringConstArrayInclusionCallBarrier { }
+    StringConstArrayInclusionCallBarrier
+  { }
 
   /**
    * A `VariableWriteAccessCfgNode` that is not succeeded (locally) by another
    * write to that variable.
    */
-  private class FinalInstanceVarWrite extends CfgNodes::ExprNodes::InstanceVariableWriteAccessCfgNode {
+  private class FinalInstanceVarWrite extends CfgNodes::ExprNodes::InstanceVariableWriteAccessCfgNode
+  {
     private InstanceVariable var;
 
     FinalInstanceVarWrite() {
@@ -163,46 +170,6 @@ private module Shared {
   }
 
   /**
-   * Holds if some render call passes `value` for `hashKey` in the `locals`
-   * argument, in ERB file `erb`.
-   */
-  pragma[noinline]
-  private predicate renderCallLocals(string hashKey, Expr value, ErbFile erb) {
-    exists(Rails::RenderCall call, Pair kvPair |
-      call.getLocals().getAKeyValuePair() = kvPair and
-      kvPair.getValue() = value and
-      kvPair.getKey().getConstantValue().isStringlikeValue(hashKey) and
-      call.getTemplateFile() = erb
-    )
-  }
-
-  pragma[noinline]
-  private predicate isFlowFromLocals0(
-    CfgNodes::ExprNodes::ElementReferenceCfgNode refNode, string hashKey, ErbFile erb
-  ) {
-    exists(DataFlow::Node argNode |
-      argNode.asExpr() = refNode.getArgument(0) and
-      refNode.getReceiver().getExpr().(MethodCall).getMethodName() = "local_assigns" and
-      argNode.getALocalSource().getConstantValue().isStringlikeValue(hashKey) and
-      erb = refNode.getFile()
-    )
-  }
-
-  private predicate isFlowFromLocals(DataFlow::Node node1, DataFlow::Node node2) {
-    exists(string hashKey, ErbFile erb |
-      // node1 is a `locals` argument to a render call...
-      renderCallLocals(hashKey, node1.asExpr().getExpr(), erb)
-    |
-      // node2 is an element reference against `local_assigns`
-      isFlowFromLocals0(node2.asExpr(), hashKey, erb)
-      or
-      // ...node2 is a "method call" to a "method" with `hashKey` as its name
-      // TODO: This may be a variable read in reality that we interpret as a method call
-      isMethodCall(node2.asExpr().getExpr(), hashKey, erb)
-    )
-  }
-
-  /**
    * Holds if `action` contains an assignment of `value` to an instance
    * variable named `name`, in ERB file `erb`.
    */
@@ -227,9 +194,9 @@ private module Shared {
 
   private predicate isFlowFromControllerInstanceVariable(DataFlow::Node node1, DataFlow::Node node2) {
     // instance variables in the controller
-    exists(ActionControllerActionMethod action, string name, ErbFile template |
+    exists(string name, ErbFile template |
       // match read to write on variable name
-      actionAssigns(action, name, node1.asExpr().getExpr(), template) and
+      actionAssigns(_, name, node1.asExpr().getExpr(), template) and
       // propagate taint from assignment RHS expr to variable read access in view
       isVariableReadAccess(node2.asExpr().getExpr(), name, template)
     )
@@ -275,8 +242,6 @@ private module Shared {
    * An additional step that is preserves dataflow in the context of XSS.
    */
   predicate isAdditionalXssFlowStep(DataFlow::Node node1, DataFlow::Node node2) {
-    isFlowFromLocals(node1, node2)
-    or
     isFlowFromControllerInstanceVariable(node1, node2)
     or
     isFlowIntoHelperMethod(node1, node2)
@@ -284,8 +249,18 @@ private module Shared {
     isFlowFromHelperMethod(node1, node2)
   }
 
-  /** DEPRECATED: Alias for isAdditionalXssFlowStep */
-  deprecated predicate isAdditionalXSSFlowStep = isAdditionalXssFlowStep/2;
+  private predicate htmlSafeGuard(CfgNodes::AstCfgNode guard, CfgNode testedNode, boolean branch) {
+    exists(DataFlow::CallNode html_safe_call | html_safe_call.getMethodName() = "html_safe?" |
+      guard = html_safe_call.asExpr() and
+      testedNode = html_safe_call.getReceiver().asExpr() and
+      branch = true
+    )
+  }
+
+  /** A guard that calls `.html_safe?` to check whether the string is already HTML-safe. */
+  private class HtmlSafeGuard extends Sanitizer {
+    HtmlSafeGuard() { this = DataFlow::BarrierGuard<htmlSafeGuard/3>::getABarrierNode() }
+  }
 }
 
 /**
@@ -304,19 +279,9 @@ module ReflectedXss {
   class Sanitizer = Shared::Sanitizer;
 
   /**
-   * DEPRECATED: Use `Sanitizer` instead.
-   *
-   * A sanitizer guard for stored XSS vulnerabilities.
-   */
-  deprecated class SanitizerGuard = Shared::SanitizerGuard;
-
-  /**
    * An additional step that is preserves dataflow in the context of reflected XSS.
    */
   predicate isAdditionalXssTaintStep = Shared::isAdditionalXssFlowStep/2;
-
-  /** DEPRECATED: Alias for isAdditionalXssTaintStep */
-  deprecated predicate isAdditionalXSSTaintStep = isAdditionalXssTaintStep/2;
 
   /**
    * A HTTP request input, considered as a flow source.
@@ -326,27 +291,32 @@ module ReflectedXss {
   }
 }
 
-/** DEPRECATED: Alias for ReflectedXss */
-deprecated module ReflectedXSS = ReflectedXss;
-
 private module OrmTracking {
   /**
    * A data flow configuration to track flow from finder calls to field accesses.
    */
-  class Configuration extends DataFlow2::Configuration {
-    Configuration() { this = "OrmTracking" }
-
-    override predicate isSource(DataFlow2::Node source) { source instanceof OrmInstantiation }
+  private module Config implements DataFlow::ConfigSig {
+    predicate isSource(DataFlow::Node source) {
+      // We currently only use ORM instances that come from a call site, so restrict the sources
+      // to calls. This works around a performance issue that would arise from using 'self' as a source
+      // in ActiveRecord models. Over time, library models should stop relying on OrmInstantiation and instead
+      // use API graphs or type-tracking the same way we track other types.
+      source instanceof OrmInstantiation and source instanceof DataFlow::CallNode
+    }
 
     // Select any call receiver and narrow down later
-    override predicate isSink(DataFlow2::Node sink) {
-      sink = any(DataFlow2::CallNode c).getReceiver()
-    }
+    predicate isSink(DataFlow::Node sink) { sink = any(DataFlow::CallNode c).getReceiver() }
 
-    override predicate isAdditionalFlowStep(DataFlow2::Node node1, DataFlow2::Node node2) {
+    predicate isAdditionalFlowStep(DataFlow::Node node1, DataFlow::Node node2) {
       Shared::isAdditionalXssFlowStep(node1, node2)
     }
+
+    predicate isBarrierIn(DataFlow::Node node) { node instanceof DataFlow::SelfParameterNode }
+
+    int accessPathLimit() { result = 1 }
   }
+
+  import DataFlow::Global<Config>
 }
 
 /** Provides default sources, sinks and sanitizers for detecting stored cross-site scripting (XSS) vulnerabilities. */
@@ -361,25 +331,17 @@ module StoredXss {
   class Sanitizer = Shared::Sanitizer;
 
   /**
-   * DEPRECATED: Use `Sanitizer` instead.
-   *
-   * A sanitizer guard for stored XSS vulnerabilities.
-   */
-  deprecated class SanitizerGuard = Shared::SanitizerGuard;
-
-  /**
    * An additional step that preserves dataflow in the context of stored XSS.
    */
   predicate isAdditionalXssTaintStep = Shared::isAdditionalXssFlowStep/2;
 
-  /** DEPRECATED: Alias for isAdditionalXssTaintStep */
-  deprecated predicate isAdditionalXSSTaintStep = isAdditionalXssTaintStep/2;
-
-  private class OrmFieldAsSource extends Source instanceof DataFlow2::CallNode {
+  private class OrmFieldAsSource extends Source instanceof DataFlow::CallNode {
     OrmFieldAsSource() {
-      exists(OrmTracking::Configuration subConfig, DataFlow2::CallNode subSrc |
-        subConfig.hasFlow(subSrc, this.getReceiver()) and
-        subSrc.(OrmInstantiation).methodCallMayAccessField(this.getMethodName())
+      exists(DataFlow::CallNode subSrc |
+        OrmTracking::flow(subSrc, this.getReceiver()) and
+        subSrc.(OrmInstantiation).methodCallMayAccessField(this.getMethodName()) and
+        this.getNumberOfArguments() = 0 and
+        not exists(this.getBlock())
       )
     }
   }
@@ -388,6 +350,3 @@ module StoredXss {
   private class FileSystemReadAccessAsSource extends Source instanceof FileSystemReadAccess { }
   // TODO: Consider `FileNameSource` flowing to script tag `src` attributes and similar
 }
-
-/** DEPRECATED: Alias for StoredXss */
-deprecated module StoredXSS = StoredXss;

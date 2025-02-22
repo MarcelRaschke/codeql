@@ -407,7 +407,7 @@ void test15()
 		{
 			if (ptr[5] == ' ') // GOOD
 			{
-				// ...
+				break;
 			}
 		}
 	}
@@ -576,7 +576,7 @@ void test21(bool cond)
 	} else {
 		if (ptr[-1] == 0) { return; } // BAD: accesses buffer[-1]
 	}
-	if (ptr[-1] == 0) { return; } // BAD: accesses buffer[-1] or buffer[0]
+	if (ptr[-1] == 0) { return; } // BAD: accesses buffer[-1] or buffer[0] [NOT DETECTED]
 
 	ptr = buffer;
 	for (i = 0; i < 2; i++)
@@ -603,6 +603,272 @@ void test22(bool b, const char* source) {
   memcpy(dest, source, n); // GOOD
 }
 
+int test23() {
+	char buffer[100];
+	return sizeof(buffer) / sizeof(buffer[101]); // GOOD
+}
+
+char* strcpy(char *, const char *);
+
+void test24(char* source) {
+	char buffer[100];
+	strcpy(buffer, source); // BAD
+}
+
+struct my_struct {
+	char* home;
+};
+
+void test25(char* source) {
+	my_struct s;
+
+	s.home = source;
+
+	char buf[100];
+	strcpy(buf, s.home); // BAD
+}
+
+void test26(bool cond)
+{
+	char buffer[100];
+	char *ptr;
+	int i;
+
+	if (buffer[-1] == 0) { return; } // BAD: accesses buffer[-1]
+
+	ptr = buffer;
+	if (cond)
+	{
+		ptr += 1;
+		if (ptr[-1] == 0) { return; } // GOOD: accesses buffer[0]
+	} else {
+		if (ptr[-1] == 0) { return; } // BAD: accesses buffer[-1]
+	}
+	if (ptr[-1] == 0) { return; } // BAD: accesses buffer[-1] or buffer[0] [NOT DETECTED]
+
+	ptr = buffer;
+	for (i = 0; i < 2; i++)
+	{
+		ptr += 1;
+	}
+	if (ptr[-1] == 0) { return; } // GOOD: accesses buffer[1]
+}
+
+#define IND 100
+#define MAX_SIZE 100
+void test27(){
+	char *src = "";
+	char *dest = "abcdefgh";
+	int ind = 100;
+	char buffer[MAX_SIZE];
+
+	strncpy(dest, src, 8); // GOOD, strncpy will not read past null terminator of source
+		
+	if(IND < MAX_SIZE){
+		buffer[IND] = 0; // GOOD: out of bounds, but inaccessible code
+	}
+}
+
+typedef struct _MYSTRUCT {
+    unsigned long  a;
+    unsigned short b;
+    unsigned char  z[ 100 ];
+} MYSTRUCT;
+
+
+const MYSTRUCT _myStruct = { 0 };
+typedef const MYSTRUCT& MYSTRUCTREF;
+
+// False positive case due to use of typedefs
+int test28(MYSTRUCTREF g)
+{
+	return memcmp(&g, &_myStruct, sizeof(MYSTRUCT)); // GOOD
+}
+
+#define offsetof(s, m) __builtin_offsetof(s, m)
+
+struct HasSomeFields {
+	unsigned long a;
+	unsigned long b;
+	unsigned long c;
+
+	void test29() {
+		memset(&a, 0, sizeof(HasSomeFields) - offsetof(HasSomeFields, a)); // GOOD
+	};
+
+	void test30() {
+		memset(&b, 0, sizeof(HasSomeFields) - offsetof(HasSomeFields, b)); // GOOD
+	};
+
+	void test31() {
+		memset(&c, 0, sizeof(HasSomeFields) - offsetof(HasSomeFields, c)); // GOOD
+	};
+
+	void test32() {
+		memset(&c, 0, sizeof(HasSomeFields) - offsetof(HasSomeFields, a)); // BAD
+	};
+
+	void test33() {
+		memset(&c, 0, sizeof(HasSomeFields) - offsetof(HasSomeFields, b)); // BAD
+	};
+
+	void test34() {
+		memset(&b, 0, sizeof(HasSomeFields) - offsetof(HasSomeFields, a)); // BAD
+	};
+
+	void test35() {
+		memset(&b, 0, sizeof(HasSomeFields) - offsetof(HasSomeFields, b) - sizeof(unsigned long)); // GOOD
+	};
+};
+
+void test36() {
+	HasSomeFields hsf;
+	memset(&hsf.a, 0, sizeof(HasSomeFields) - offsetof(HasSomeFields, a)); // GOOD
+	memset(&hsf.c, 0, sizeof(HasSomeFields) - offsetof(HasSomeFields, a)); // BAD
+}
+
+struct AnonUnionInStruct
+{
+  union {
+    struct {
+      unsigned int a_1;
+      unsigned int b_1;
+      unsigned int c_1;
+    };
+    struct {
+      unsigned int a_2;
+      unsigned int b_2;
+    };
+  };  
+  unsigned int d;
+
+  void test37() {
+    memset(&a_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, a_1)); // GOOD
+    memset(&a_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, b_1)); // GOOD
+    memset(&a_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, c_1)); // GOOD
+    memset(&a_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, a_2)); // GOOD
+    memset(&a_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, b_2)); // GOOD
+    memset(&a_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, d)); // GOOD
+
+    memset(&b_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, a_1)); // BAD
+    memset(&b_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, b_1)); // GOOD
+    memset(&b_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, c_1)); // GOOD
+    memset(&b_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, a_2)); // BAD
+    memset(&b_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, b_2)); // GOOD
+    memset(&b_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, d)); // GOOD
+
+    memset(&c_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, a_1)); // BAD
+    memset(&c_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, b_1)); // BAD
+    memset(&c_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, c_1)); // GOOD
+    memset(&c_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, a_2)); // BAD
+    memset(&c_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, b_2)); // GOOD
+    memset(&c_1, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, d)); // GOOD
+
+    memset(&a_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, a_1)); // GOOD
+    memset(&a_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, b_1)); // GOOD
+    memset(&a_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, c_1)); // GOOD
+    memset(&a_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, a_2)); // GOOD
+    memset(&a_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, b_2)); // GOOD
+    memset(&a_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, d)); // GOOD
+
+    memset(&b_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, a_1)); // BAD
+    memset(&b_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, b_1)); // GOOD
+    memset(&b_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, c_1)); // GOOD
+    memset(&b_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, a_2)); // BAD
+    memset(&b_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, b_2)); // GOOD
+    memset(&b_2, 0, sizeof(AnonUnionInStruct) - offsetof(AnonUnionInStruct, d)); // GOOD
+  };
+};
+
+struct UnionWithoutStruct
+{
+  union
+  {
+    unsigned int a;
+  };
+
+  unsigned int b;
+
+  void test37() {
+    memset(&a, 0, sizeof(UnionWithoutStruct) - offsetof(UnionWithoutStruct, a)); // GOOD
+    memset(&a, 0, sizeof(UnionWithoutStruct) - offsetof(UnionWithoutStruct, b)); // GOOD
+    memset(&b, 0, sizeof(UnionWithoutStruct) - offsetof(UnionWithoutStruct, a)); // BAD
+  };
+};
+
+struct ThreeUInts {
+  unsigned int a;
+  unsigned int b;
+  unsigned int c;
+};
+
+struct FourUInts {
+  ThreeUInts inner;
+  unsigned int x;
+};
+
+struct S2 {
+  FourUInts f;
+  unsigned u;
+  void test38() {
+    memset(&f.inner.a, 0, sizeof(S2) - offsetof(ThreeUInts, a)); // GOOD
+    memset(&f.inner.a, 0, sizeof(S2) - offsetof(ThreeUInts, b)); // GOOD
+    memset(&f.inner.a, 0, sizeof(S2) - offsetof(ThreeUInts, c)); // GOOD
+    memset(&f.inner.a, 0, sizeof(S2) - offsetof(FourUInts, inner)); // GOOD
+    memset(&f.inner.a, 0, sizeof(S2) - offsetof(FourUInts, x)); // GOOD
+    memset(&f.inner.a, 0, sizeof(S2) - offsetof(S2, f)); // GOOD
+    memset(&f.inner.a, 0, sizeof(S2) - offsetof(S2, u)); // GOOD
+
+    memset(&f.inner.b, 0, sizeof(S2) - offsetof(ThreeUInts, a)); // BAD
+    memset(&f.inner.b, 0, sizeof(S2) - offsetof(ThreeUInts, b)); // GOOD
+    memset(&f.inner.b, 0, sizeof(S2) - offsetof(ThreeUInts, c)); // GOOD
+    memset(&f.inner.b, 0, sizeof(S2) - offsetof(FourUInts, inner)); // BAD
+    memset(&f.inner.b, 0, sizeof(S2) - offsetof(FourUInts, x)); // GOOD
+    memset(&f.inner.b, 0, sizeof(S2) - offsetof(S2, f)); // BAD
+    memset(&f.inner.b, 0, sizeof(S2) - offsetof(S2, u)); // GOOD
+
+    memset(&f.inner.c, 0, sizeof(S2) - offsetof(ThreeUInts, a)); // BAD
+    memset(&f.inner.c, 0, sizeof(S2) - offsetof(ThreeUInts, b)); // BAD
+    memset(&f.inner.c, 0, sizeof(S2) - offsetof(ThreeUInts, c)); // GOOD
+    memset(&f.inner.c, 0, sizeof(S2) - offsetof(FourUInts, inner)); // BAD
+    memset(&f.inner.c, 0, sizeof(S2) - offsetof(FourUInts, x)); // GOOD
+    memset(&f.inner.c, 0, sizeof(S2) - offsetof(S2, f)); // BAD
+    memset(&f.inner.c, 0, sizeof(S2) - offsetof(S2, u)); // GOOD
+
+    memset(&f.inner, 0, sizeof(S2) - offsetof(ThreeUInts, a)); // GOOD
+    memset(&f.inner, 0, sizeof(S2) - offsetof(ThreeUInts, b)); // GOOD
+    memset(&f.inner, 0, sizeof(S2) - offsetof(ThreeUInts, c)); // GOOD
+    memset(&f.inner, 0, sizeof(S2) - offsetof(FourUInts, inner)); // GOOD
+    memset(&f.inner, 0, sizeof(S2) - offsetof(FourUInts, x)); // GOOD
+    memset(&f.inner, 0, sizeof(S2) - offsetof(S2, f)); // GOOD
+    memset(&f.inner, 0, sizeof(S2) - offsetof(S2, u)); // GOOD
+
+    memset(&f.x, 0, sizeof(S2) - offsetof(ThreeUInts, a)); // BAD
+    memset(&f.x, 0, sizeof(S2) - offsetof(ThreeUInts, b)); // BAD
+    memset(&f.x, 0, sizeof(S2) - offsetof(ThreeUInts, c)); // BAD
+    memset(&f.x, 0, sizeof(S2) - offsetof(FourUInts, inner)); // BAD
+    memset(&f.x, 0, sizeof(S2) - offsetof(FourUInts, x)); // GOOD
+    memset(&f.x, 0, sizeof(S2) - offsetof(S2, f)); // GOOD
+    memset(&f.x, 0, sizeof(S2) - offsetof(S2, u)); // GOOD
+
+    memset(&f, 0, sizeof(S2) - offsetof(ThreeUInts, a)); // GOOD
+    memset(&f, 0, sizeof(S2) - offsetof(ThreeUInts, b)); // GOOD
+    memset(&f, 0, sizeof(S2) - offsetof(ThreeUInts, c)); // GOOD
+    memset(&f, 0, sizeof(S2) - offsetof(FourUInts, inner)); // GOOD
+    memset(&f, 0, sizeof(S2) - offsetof(FourUInts, x)); // GOOD
+    memset(&f, 0, sizeof(S2) - offsetof(S2, f)); // GOOD
+    memset(&f, 0, sizeof(S2) - offsetof(S2, u)); // GOOD
+
+    memset(&u, 0, sizeof(S2) - offsetof(ThreeUInts, a)); // BAD
+    memset(&u, 0, sizeof(S2) - offsetof(ThreeUInts, b)); // BAD
+    memset(&u, 0, sizeof(S2) - offsetof(ThreeUInts, c)); // BAD
+    memset(&u, 0, sizeof(S2) - offsetof(FourUInts, inner)); // BAD
+    memset(&u, 0, sizeof(S2) - offsetof(FourUInts, x)); // BAD
+    memset(&u, 0, sizeof(S2) - offsetof(S2, f)); // BAD
+    memset(&u, 0, sizeof(S2) - offsetof(S2, u)); // GOOD
+  }
+};
+
 int tests_main(int argc, char *argv[])
 {
 	long long arr17[19];
@@ -627,6 +893,9 @@ int tests_main(int argc, char *argv[])
 	test20();
 	test21(argc == 0);
 	test22(argc == 0, argv[0]);
+	test23();
+	test24(argv[0]);
+	test25(argv[0]);
 
 	return 0;
 }

@@ -14,6 +14,7 @@ private import semmle.python.frameworks.internal.SelfRefMixin
 private import semmle.python.frameworks.Multidict
 private import semmle.python.frameworks.Yarl
 private import semmle.python.frameworks.internal.InstanceTaintStepsHelper
+private import semmle.python.frameworks.data.ModelsAsData
 
 /**
  * INTERNAL: Do not use.
@@ -31,6 +32,8 @@ module AiohttpWebModel {
     /** Gets a reference to the `aiohttp.web.View` class or any subclass. */
     API::Node subclassRef() {
       result = API::moduleImport("aiohttp").getMember("web").getMember("View").getASubclass*()
+      or
+      result = ModelOutput::getATypeNode("aiohttp.web.View~Subclass").getASubclass*()
     }
   }
 
@@ -59,7 +62,8 @@ module AiohttpWebModel {
    * Extend this class to refine existing API models. If you want to model new APIs,
    * extend `AiohttpRouteSetup::Range` instead.
    */
-  class AiohttpRouteSetup extends Http::Server::RouteSetup::Range instanceof AiohttpRouteSetup::Range {
+  class AiohttpRouteSetup extends Http::Server::RouteSetup::Range instanceof AiohttpRouteSetup::Range
+  {
     override Parameter getARoutedParameter() { none() }
 
     override string getFramework() { result = "aiohttp.web" }
@@ -252,7 +256,8 @@ module AiohttpWebModel {
   }
 
   /** A request handler defined in an `aiohttp.web` view class, that has no known route. */
-  private class AiohttpViewClassRequestHandlerWithoutKnownRoute extends Http::Server::RequestHandler::Range {
+  private class AiohttpViewClassRequestHandlerWithoutKnownRoute extends Http::Server::RequestHandler::Range
+  {
     AiohttpViewClassRequestHandlerWithoutKnownRoute() {
       exists(AiohttpViewClass vc | vc.getARequestHandler() = this) and
       not exists(AiohttpRouteSetup setup | setup.getARequestHandler() = this)
@@ -440,7 +445,8 @@ module AiohttpWebModel {
    * handler is invoked.
    */
   class AiohttpRequestHandlerRequestParam extends Request::InstanceSource, RemoteFlowSource::Range,
-    DataFlow::ParameterNode {
+    DataFlow::ParameterNode
+  {
     AiohttpRequestHandlerRequestParam() {
       exists(Function requestHandler |
         requestHandler = any(AiohttpCoroutineRouteSetup setup).getARequestHandler() and
@@ -466,11 +472,33 @@ module AiohttpWebModel {
   }
 
   /**
+   * A parameter that has a type annotation of `aiohttp.web.Request`, so with all
+   * likelihood will receive an `aiohttp.web.Request` instance at some point when a
+   * request handler is invoked.
+   */
+  class AiohttpRequestParamFromTypeAnnotation extends Request::InstanceSource,
+    DataFlow::ParameterNode, RemoteFlowSource::Range
+  {
+    AiohttpRequestParamFromTypeAnnotation() {
+      not this instanceof AiohttpRequestHandlerRequestParam and
+      this.getParameter().getAnnotation() =
+        API::moduleImport("aiohttp")
+            .getMember("web")
+            .getMember("Request")
+            .getAValueReachableFromSource()
+            .asExpr()
+    }
+
+    override string getSourceType() { result = "aiohttp.web.Request from type-annotation" }
+  }
+
+  /**
    * A read of the `request` attribute on an instance of an aiohttp.web View class,
    * which is the request being processed currently.
    */
   class AiohttpViewClassRequestAttributeRead extends Request::InstanceSource,
-    RemoteFlowSource::Range, DataFlow::Node {
+    RemoteFlowSource::Range, DataFlow::Node
+  {
     AiohttpViewClassRequestAttributeRead() {
       this.(DataFlow::AttrRead).getObject() = any(AiohttpViewClass vc).getASelfRef() and
       this.(DataFlow::AttrRead).getAttributeName() = "request"
@@ -494,13 +522,17 @@ module AiohttpWebModel {
    * - https://docs.aiohttp.org/en/stable/web_quickstart.html#aiohttp-web-exceptions
    */
   class AiohttpWebResponseInstantiation extends Http::Server::HttpResponse::Range,
-    Response::InstanceSource, DataFlow::CallCfgNode {
+    Response::InstanceSource, API::CallNode
+  {
     API::Node apiNode;
 
     AiohttpWebResponseInstantiation() {
       this = apiNode.getACall() and
       (
-        apiNode = API::moduleImport("aiohttp").getMember("web").getMember("Response")
+        apiNode =
+          API::moduleImport("aiohttp")
+              .getMember("web")
+              .getMember(["FileResponse", "Response", "StreamResponse"])
         or
         exists(string httpExceptionClassName |
           httpExceptionClassName in [
@@ -540,6 +572,10 @@ module AiohttpWebModel {
 
     override DataFlow::Node getMimetypeOrContentTypeArg() {
       result = this.getArgByName("content_type")
+      or
+      exists(string key | key.toLowerCase() = "content-type" |
+        result = this.getKeywordParameter("headers").getSubscript(key).getAValueReachingSink()
+      )
     }
 
     override string getMimetypeDefault() {
@@ -548,6 +584,37 @@ module AiohttpWebModel {
       or
       not exists(this.getArgByName("text")) and
       result = "application/octet-stream"
+    }
+  }
+
+  /**
+   * A call to the `aiohttp.web.FileResponse` constructor as a sink for Filesystem access.
+   */
+  class FileResponseCall extends FileSystemAccess::Range, API::CallNode {
+    FileResponseCall() {
+      this = API::moduleImport("aiohttp").getMember("web").getMember("FileResponse").getACall()
+    }
+
+    override DataFlow::Node getAPathArgument() { result = this.getParameter(0, "path").asSink() }
+  }
+
+  /**
+   * An instantiation of `aiohttp.web.StreamResponse`.
+   *
+   * See https://docs.aiohttp.org/en/stable/web_reference.html#aiohttp.web.StreamResponse
+   */
+  class StreamResponse extends AiohttpWebResponseInstantiation {
+    StreamResponse() {
+      this = API::moduleImport("aiohttp").getMember("web").getMember("StreamResponse").getACall()
+    }
+
+    override DataFlow::Node getBody() {
+      result =
+        this.getReturn()
+            .getMember(["write", "write_eof"])
+            .getACall()
+            .getParameter(0, "data")
+            .asSink()
     }
   }
 
@@ -562,7 +629,8 @@ module AiohttpWebModel {
    * See the part about redirects at https://docs.aiohttp.org/en/stable/web_quickstart.html#aiohttp-web-exceptions
    */
   class AiohttpRedirectExceptionInstantiation extends AiohttpWebResponseInstantiation,
-    Http::Server::HttpRedirectResponse::Range {
+    Http::Server::HttpRedirectResponse::Range
+  {
     AiohttpRedirectExceptionInstantiation() {
       exists(string httpRedirectExceptionClassName |
         httpRedirectExceptionClassName in [
@@ -585,7 +653,7 @@ module AiohttpWebModel {
   /**
    * A call to `set_cookie` on a HTTP Response.
    */
-  class AiohttpResponseSetCookieCall extends Http::Server::CookieWrite::Range, DataFlow::CallCfgNode {
+  class AiohttpResponseSetCookieCall extends Http::Server::SetCookieCall {
     AiohttpResponseSetCookieCall() {
       this = aiohttpResponseInstance().getMember("set_cookie").getACall()
     }
@@ -600,7 +668,8 @@ module AiohttpWebModel {
   /**
    * A call to `del_cookie` on a HTTP Response.
    */
-  class AiohttpResponseDelCookieCall extends Http::Server::CookieWrite::Range, DataFlow::CallCfgNode {
+  class AiohttpResponseDelCookieCall extends Http::Server::CookieWrite::Range, DataFlow::CallCfgNode
+  {
     AiohttpResponseDelCookieCall() {
       this = aiohttpResponseInstance().getMember("del_cookie").getACall()
     }
@@ -636,13 +705,42 @@ module AiohttpWebModel {
 
     override DataFlow::Node getValueArg() { result = value }
   }
+
+  /**
+   * A dict-like write to an item of the `headers` attribute on a HTTP response, such as
+   * `response.headers[name] = value`.
+   */
+  class AiohttpResponseHeaderSubscriptWrite extends Http::Server::ResponseHeaderWrite::Range {
+    DataFlow::Node index;
+    DataFlow::Node value;
+
+    AiohttpResponseHeaderSubscriptWrite() {
+      exists(API::Node i |
+        value = aiohttpResponseInstance().getMember("headers").getSubscriptAt(i).asSink() and
+        index = i.asSink() and
+        // To give `this` a value, we need to choose between either LHS or RHS,
+        // and just go with the RHS as it is readily available
+        this = value
+      )
+    }
+
+    override DataFlow::Node getNameArg() { result = index }
+
+    override DataFlow::Node getValueArg() { result = value }
+
+    override predicate nameAllowsNewline() { none() }
+
+    override predicate valueAllowsNewline() { none() }
+  }
 }
 
 /**
+ * INTERNAL: Do not use.
+ *
  * Provides models for the web server part (`aiohttp.client`) of the `aiohttp` PyPI package.
  * See https://docs.aiohttp.org/en/stable/client.html
  */
-private module AiohttpClientModel {
+module AiohttpClientModel {
   /**
    * Provides models for the `aiohttp.ClientSession` class
    *
@@ -650,8 +748,10 @@ private module AiohttpClientModel {
    */
   module ClientSession {
     /** Gets a reference to the `aiohttp.ClientSession` class. */
-    private API::Node classRef() {
+    API::Node classRef() {
       result = API::moduleImport("aiohttp").getMember("ClientSession")
+      or
+      result = ModelOutput::getATypeNode("aiohttp.ClientSession~Subclass").getASubclass*()
     }
 
     /** Gets a reference to an instance of `aiohttp.ClientSession`. */
@@ -662,14 +762,14 @@ private module AiohttpClientModel {
       string methodName;
 
       OutgoingRequestCall() {
-        methodName in [Http::httpVerbLower(), "request"] and
+        methodName in [Http::httpVerbLower(), "request", "ws_connect"] and
         this = instance().getMember(methodName).getACall()
       }
 
       override DataFlow::Node getAUrlPart() {
         result = this.getArgByName("url")
         or
-        not methodName = "request" and
+        methodName in [Http::httpVerbLower(), "ws_connect"] and
         result = this.getArg(0)
         or
         methodName = "request" and

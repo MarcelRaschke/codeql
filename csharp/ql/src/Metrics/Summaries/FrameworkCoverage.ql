@@ -1,5 +1,5 @@
 /**
- * @id csharp/summary/framework-coverage
+ * @id cs/summary/framework-coverage
  * @name Metrics of framework coverage
  * @description Expose metrics for the number of API endpoints covered by CSV models.
  * @kind metric
@@ -7,7 +7,7 @@
  */
 
 import csharp
-import semmle.code.csharp.dataflow.ExternalFlow
+import semmle.code.csharp.dataflow.internal.ExternalFlow
 
 from string namespaceAndType, int rows
 where

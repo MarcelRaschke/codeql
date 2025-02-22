@@ -48,7 +48,7 @@ class UnaryLogicalOperation extends UnaryOperation, TUnaryLogicalOperation { }
  * not params.empty?
  * ```
  */
-class NotExpr extends UnaryLogicalOperation, TNotExpr {
+class NotExpr extends UnaryLogicalOperation instanceof NotExprImpl {
   final override string getAPrimaryQlClass() { result = "NotExpr" }
 }
 
@@ -118,7 +118,7 @@ class ComplementExpr extends UnaryBitwiseOperation, TComplementExpr {
  * defined? some_method
  * ```
  */
-class DefinedExpr extends UnaryOperation, TDefinedExpr {
+class DefinedExpr extends UnaryOperation instanceof DefinedExprImpl {
   final override string getAPrimaryQlClass() { result = "DefinedExpr" }
 }
 
@@ -156,6 +156,27 @@ class BinaryArithmeticOperation extends BinaryOperation, TBinaryArithmeticOperat
  */
 class AddExpr extends BinaryArithmeticOperation, TAddExpr {
   final override string getAPrimaryQlClass() { result = "AddExpr" }
+}
+
+/**
+ * A series of add expressions, e.g. `1 + 2 + 3`.
+ * This class is used to represent the root of such a series, and
+ * the `getALeaf` predicate can be used to get the leaf nodes.
+ */
+class AddExprRoot extends AddExpr {
+  AddExprRoot() { not this.getParent() instanceof AddExpr }
+
+  private AstNode getALeafOrAdd() {
+    result = this.getAChild()
+    or
+    result = this.getALeafOrAdd().(AddExpr).getAChild()
+  }
+
+  /** Gets a leaf node of this add expression. */
+  AstNode getALeaf() {
+    result = this.getALeafOrAdd() and
+    not result instanceof AddExpr
+  }
 }
 
 /**

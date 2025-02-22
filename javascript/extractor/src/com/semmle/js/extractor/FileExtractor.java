@@ -5,7 +5,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
@@ -104,7 +103,7 @@ public class FileExtractor {
 
   /** Information about supported file types. */
   public static enum FileType {
-    HTML(".htm", ".html", ".xhtm", ".xhtml", ".vue", ".hbs", ".ejs", ".njk", ".html.erb") {
+    HTML(".htm", ".html", ".xhtm", ".xhtml", ".vue", ".hbs", ".ejs", ".njk", ".erb", ".jsp", ".dot") {
       @Override
       public IExtractor mkExtractor(ExtractorConfig config, ExtractorState state) {
         return new HTMLExtractor(config, state);
@@ -120,11 +119,23 @@ public class FileExtractor {
         if (isBinaryFile(f, lcExt, config)) {
           return false;
         }
+        // for ERB files we are only interrested in `.html.erb` files
+        if (FileUtil.extension(f).equalsIgnoreCase(".erb")) {
+          if (!f.getName().toLowerCase().endsWith(".html.erb")) {
+            return false;
+          }
+        }
+        // for DOT files we are only interrested in `.html.dot` files
+        if (FileUtil.extension(f).equalsIgnoreCase(".dot")) {
+          if (!f.getName().toLowerCase().endsWith(".html.dot")) {
+            return false;
+          }
+        }
         return super.contains(f, lcExt, config);
       }
     },
 
-    JS(".js", ".jsx", ".mjs", ".cjs", ".es6", ".es") {
+    JS(".js", ".jsx", ".mjs", ".cjs", ".es6", ".es", ".xsjs", ".xsjslib") {
       @Override
       public IExtractor mkExtractor(ExtractorConfig config, ExtractorState state) {
         return new ScriptExtractor(config, state);
@@ -173,8 +184,8 @@ public class FileExtractor {
         if (super.contains(f, lcExt, config)) return true;
 
         // detect JSON-encoded configuration files whose name starts with `.` and ends with `rc`
-        // (e.g., `.eslintrc` or `.babelrc`)
-        if (f.isFile() && f.getName().matches("\\..*rc")) {
+        // (e.g., `.eslintrc` or `.babelrc`) as well as `.xsaccess` files
+        if (f.isFile() && f.getName().matches("\\..*rc|\\.xsaccess")) {
           try (BufferedReader br = new BufferedReader(new FileReader(f))) {
             // check whether the first two non-empty lines look like the start of a JSON object
             // (two lines because the opening brace is usually on a line by itself)
@@ -428,7 +439,7 @@ public class FileExtractor {
   }
 
   /** @return the number of lines of code extracted, or {@code null} if the file was cached */
-  public Integer extract(File f, ExtractorState state) throws IOException {
+  public ParseResultInfo extract(File f, ExtractorState state) throws IOException {
     FileSnippet snippet = state.getSnippets().get(f.toPath());
     if (snippet != null) {
       return this.extractSnippet(f.toPath(), snippet, state);
@@ -455,7 +466,7 @@ public class FileExtractor {
    * <p>A trap file will be derived from the snippet file, but its file label, source locations, and
    * source archive entry are based on the original file.
    */
-  private Integer extractSnippet(Path file, FileSnippet origin, ExtractorState state) throws IOException {
+  private ParseResultInfo extractSnippet(Path file, FileSnippet origin, ExtractorState state) throws IOException {
     TrapWriter trapwriter = outputConfig.getTrapWriterFactory().mkTrapWriter(file.toFile());
 
     File originalFile = origin.getOriginalFile().toFile();
@@ -489,7 +500,7 @@ public class FileExtractor {
    * <p>Also note that we support extraction with TRAP writer factories that are not file-backed;
    * obviously, no caching is done in that scenario.
    */
-  private Integer extractContents(
+  private ParseResultInfo extractContents(
       File extractedFile, Label fileLabel, String source, LocationManager locationManager, ExtractorState state)
       throws IOException {
     ExtractionMetrics metrics = new ExtractionMetrics();
@@ -539,7 +550,7 @@ public class FileExtractor {
       TextualExtractor textualExtractor =
           new TextualExtractor(
               trapwriter, locationManager, source, config.getExtractLines(), metrics, extractedFile);
-      LoCInfo loc = extractor.extract(textualExtractor);
+      ParseResultInfo loc = extractor.extract(textualExtractor);
       int numLines = textualExtractor.isSnippet() ? 0 : textualExtractor.getNumLines();
       int linesOfCode = loc.getLinesOfCode(), linesOfComments = loc.getLinesOfComments();
       trapwriter.addTuple("numlines", fileLabel, numLines, linesOfCode, linesOfComments);
@@ -547,7 +558,7 @@ public class FileExtractor {
       metrics.stopPhase(ExtractionPhase.FileExtractor_extractContents);
       metrics.writeTimingsToTrap(trapwriter);
       successful = true;
-      return linesOfCode;
+      return loc;
     } finally {
       if (!successful && trapwriter instanceof CachingTrapWriter)
         ((CachingTrapWriter) trapwriter).discard();

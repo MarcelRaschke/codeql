@@ -1,22 +1,21 @@
 [package]
-name = "ruby-extractor"
+name = "codeql-extractor-ruby"
+description = "CodeQL Ruby extractor"
 version = "0.1.0"
 authors = ["GitHub"]
-edition = "2018"
+edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
+# When updating these dependencies, run `misc/bazel/3rdparty/update_cargo_deps.sh`
 [dependencies]
-flate2 = "1.0"
-node-types = { path = "../node-types" }
-tree-sitter = "0.19"
-tree-sitter-embedded-template = { git = "https://github.com/tree-sitter/tree-sitter-embedded-template.git", rev = "1a538da253d73f896b9f6c0c7d79cda58791ac5c" }
-tree-sitter-ruby = { git = "https://github.com/tree-sitter/tree-sitter-ruby.git", rev = "ad1043283b1f9daf4aad381b6a81f18a5a27fe7e" }
-clap = "3.0"
+tree-sitter = ">= 0.23.0"
+tree-sitter-embedded-template = "0.23.2"
+tree-sitter-ruby = "0.23.1"
+clap = { version = "4.5", features = ["derive"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3.3", features = ["env-filter"] }
-rayon = "1.5.0"
-num_cpus = "1.13.0"
-regex = "1.5.5"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+rayon = "1.10.0"
+regex = "1.11.1"
 encoding = "0.2"
-lazy_static = "1.4.0"
+lazy_static = "1.5.0"
+
+codeql-extractor = { path = "../../shared/tree-sitter-extractor" }

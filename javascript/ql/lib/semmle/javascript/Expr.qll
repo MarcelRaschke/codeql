@@ -379,7 +379,10 @@ class NullLiteral extends @null_literal, Literal { }
  * false
  * ```
  */
-class BooleanLiteral extends @boolean_literal, Literal { }
+class BooleanLiteral extends @boolean_literal, Literal {
+  /** Gets the value of this literal. */
+  boolean getBoolValue() { if this.getRawValue() = "true" then result = true else result = false }
+}
 
 /**
  * A numeric literal.
@@ -478,6 +481,9 @@ class RegExpLiteral extends @regexp_literal, Literal, RegExpParent {
   /** Holds if this regular expression has an `s` flag. */
   predicate isDotAll() { RegExp::isDotAll(this.getFlags()) }
 
+  /** Holds if this regular expression has an `v` flag. */
+  predicate isUnicodeSets() { RegExp::isUnicodeSets(this.getFlags()) }
+
   override string getAPrimaryQlClass() { result = "RegExpLiteral" }
 }
 
@@ -571,7 +577,7 @@ class ObjectExpr extends @obj_expr, Expr {
   Property getProperty(int i) { properties(result, this, i, _, _) }
 
   /** Gets a property in this object literal. */
-  Property getAProperty() { exists(int i | result = this.getProperty(i)) }
+  Property getAProperty() { result = this.getProperty(_) }
 
   /** Gets the number of properties in this object literal. */
   int getNumProperty() { result = count(this.getAProperty()) }
@@ -2804,6 +2810,7 @@ class FunctionBindExpr extends @bind_expr, Expr {
  *
  * ```
  * import("fs")
+ * import("foo", { with: { type: "json" }})
  * ```
  */
 class DynamicImportExpr extends @dynamic_import, Expr, Import {
@@ -2815,6 +2822,27 @@ class DynamicImportExpr extends @dynamic_import, Expr, Import {
   }
 
   override PathExpr getImportedPath() { result = this.getSource() }
+
+  /**
+   * Gets the second "argument" to the import expression, that is, the `Y` in `import(X, Y)`.
+   *
+   * For example, gets the `{ with: { type: "json" }}` expression in the following:
+   * ```js
+   * import('foo', { with: { type: "json" }})
+   * ```
+   */
+  Expr getImportOptions() { result = this.getChildExpr(1) }
+
+  /**
+   * DEPRECATED: use `getImportOptions` instead.
+   * Gets the second "argument" to the import expression, that is, the `Y` in `import(X, Y)`.
+   *
+   * For example, gets the `{ with: { type: "json" }}` expression in the following:
+   * ```js
+   * import('foo', { with: { type: "json" }})
+   * ```
+   */
+  deprecated Expr getImportAttributes() { result = this.getImportOptions() }
 
   override Module getEnclosingModule() { result = this.getTopLevel() }
 

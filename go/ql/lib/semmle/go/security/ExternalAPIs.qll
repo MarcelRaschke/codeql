@@ -4,6 +4,7 @@
  */
 
 import go
+private import semmle.go.dataflow.FlowSummary
 private import Xss
 private import SqlInjectionCustomizations
 private import RequestForgeryCustomizations
@@ -16,8 +17,15 @@ private import Logrus
  */
 abstract class SafeExternalApiFunction extends Function { }
 
-/** DEPRECATED: Alias for SafeExternalApiFunction */
-deprecated class SafeExternalAPIFunction = SafeExternalApiFunction;
+/**
+ * A `Function` with one or more arguments that are considered "safe" from a security perspective.
+ */
+abstract class SafeExternalApiArgument extends Function {
+  /**
+   * Holds if `i` is a safe argument to this function.
+   */
+  abstract predicate isSafeArgument(int i);
+}
 
 private predicate isDefaultSafePackage(Package package) {
   package.getPath() in ["time", "unicode/utf8", package("gopkg.in/go-playground/validator", "")]
@@ -28,7 +36,10 @@ private class DefaultSafeExternalApiFunction extends SafeExternalApiFunction {
   DefaultSafeExternalApiFunction() {
     this instanceof BuiltinFunction or
     isDefaultSafePackage(this.getPackage()) or
-    this.hasQualifiedName(package("gopkg.in/square/go-jose", "jwt"), "ParseSigned") or
+    this.hasQualifiedName(package([
+          "gopkg.in/square/go-jose", "gopkg.in/go-jose/go-jose", "github.com/square/go-jose",
+          "github.com/go-jose/go-jose"
+        ], "jwt"), "ParseSigned") or
     this.(Method).hasQualifiedName(Gorm::packagePath(), "DB", "Update") or
     this.hasQualifiedName("crypto/hmac", "Equal") or
     this.hasQualifiedName("crypto/subtle", "ConstantTimeCompare") or
@@ -42,6 +53,16 @@ private class DefaultSafeExternalApiFunction extends SafeExternalApiFunction {
     this.hasQualifiedName("crypto/md5", "Sum") or
     this.hasQualifiedName("crypto/sha1", "Sum")
   }
+}
+
+private class DefaultSafeExternalApiFunctionArgument extends SafeExternalApiArgument {
+  int index;
+
+  DefaultSafeExternalApiFunctionArgument() {
+    this.(Method).hasQualifiedName("net/http", "Header", ["Set", "Del"]) and index = -1
+  }
+
+  override predicate isSafeArgument(int i) { i = index }
 }
 
 /** Holds if `callNode` is a local function pointer. */
@@ -75,9 +96,11 @@ class ExternalApiDataNode extends DataFlow::Node {
     // Not defined in a test file
     not call.getFile() instanceof TestFile and
     // Not already modeled as a taint step
-    not exists(DataFlow::Node next | TaintTracking::localTaintStep(this, next)) and
+    not TaintTracking::localTaintStep(this, _) and
     // Not a call to a known safe external API
-    not call.getTarget() instanceof SafeExternalApiFunction
+    not call.getTarget() instanceof SafeExternalApiFunction and
+    // Not a known safe argument to an external API
+    not any(SafeExternalApiArgument seaa).isSafeArgument(i)
   }
 
   /** Gets the called API `Function`. */
@@ -105,9 +128,6 @@ class ExternalApiDataNode extends DataFlow::Node {
   }
 }
 
-/** DEPRECATED: Alias for ExternalApiDataNode */
-deprecated class ExternalAPIDataNode = ExternalApiDataNode;
-
 /** Gets the name of a method in package `p` which has a function model. */
 TaintTracking::FunctionModel getAMethodModelInPackage(Package p) {
   p = result.getPackage() and
@@ -126,9 +146,16 @@ Package getAPackageWithFunctionModels() {
   exists(getAMethodModelInPackage(result))
 }
 
+/** Gets the name of a package that has at least one SummarizedCallable. */
+Package getAPackageWithSummarizedCallables() {
+  result = any(SummarizedCallable c).asFunction().getPackage()
+}
+
 /** Gets the name of a package which has models. */
 Package getAPackageWithModels() {
   result = getAPackageWithFunctionModels()
+  or
+  result = getAPackageWithSummarizedCallables()
   or
   // An incomplete list of packages which have been modeled but do not have any function models
   result.getPath() in [
@@ -155,45 +182,36 @@ class UnknownExternalApiDataNode extends ExternalApiDataNode {
   }
 }
 
-/** DEPRECATED: Alias for UnknownExternalApiDataNode */
-deprecated class UnknownExternalAPIDataNode = UnknownExternalApiDataNode;
+private module UntrustedDataConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node source) { source instanceof ActiveThreatModelSource }
 
-/** A configuration for tracking flow from `RemoteFlowSource`s to `ExternalApiDataNode`s. */
-class UntrustedDataToExternalApiConfig extends TaintTracking::Configuration {
-  UntrustedDataToExternalApiConfig() { this = "UntrustedDataToExternalAPIConfig" }
-
-  override predicate isSource(DataFlow::Node source) { source instanceof UntrustedFlowSource }
-
-  override predicate isSink(DataFlow::Node sink) { sink instanceof ExternalApiDataNode }
+  predicate isSink(DataFlow::Node sink) { sink instanceof ExternalApiDataNode }
 }
 
-/** DEPRECATED: Alias for UntrustedDataToExternalApiConfig */
-deprecated class UntrustedDataToExternalAPIConfig = UntrustedDataToExternalApiConfig;
+/**
+ * Tracks data flow from `ActiveThreatModelSource`s to `ExternalApiDataNode`s.
+ */
+module UntrustedDataToExternalApiFlow = DataFlow::Global<UntrustedDataConfig>;
 
-/** A configuration for tracking flow from `RemoteFlowSource`s to `UnknownExternalApiDataNode`s. */
-class UntrustedDataToUnknownExternalApiConfig extends TaintTracking::Configuration {
-  UntrustedDataToUnknownExternalApiConfig() { this = "UntrustedDataToUnknownExternalAPIConfig" }
+private module UntrustedDataToUnknownExternalApiConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node source) { source instanceof ActiveThreatModelSource }
 
-  override predicate isSource(DataFlow::Node source) { source instanceof UntrustedFlowSource }
-
-  override predicate isSink(DataFlow::Node sink) { sink instanceof UnknownExternalApiDataNode }
+  predicate isSink(DataFlow::Node sink) { sink instanceof UnknownExternalApiDataNode }
 }
 
-/** DEPRECATED: Alias for UntrustedDataToUnknownExternalApiConfig */
-deprecated class UntrustedDataToUnknownExternalAPIConfig = UntrustedDataToUnknownExternalApiConfig;
+/**
+ * Tracks data flow from `ActiveThreatModelSource`s to `UnknownExternalApiDataNode`s.
+ */
+module UntrustedDataToUnknownExternalApiFlow =
+  DataFlow::Global<UntrustedDataToUnknownExternalApiConfig>;
 
 /** A node representing untrusted data being passed to an external API. */
 class UntrustedExternalApiDataNode extends ExternalApiDataNode {
-  UntrustedExternalApiDataNode() { any(UntrustedDataToExternalApiConfig c).hasFlow(_, this) }
+  UntrustedExternalApiDataNode() { UntrustedDataToExternalApiFlow::flow(_, this) }
 
   /** Gets a source of untrusted data which is passed to this external API data node. */
-  DataFlow::Node getAnUntrustedSource() {
-    any(UntrustedDataToExternalApiConfig c).hasFlow(result, this)
-  }
+  DataFlow::Node getAnUntrustedSource() { UntrustedDataToExternalApiFlow::flow(result, this) }
 }
-
-/** DEPRECATED: Alias for UntrustedExternalApiDataNode */
-deprecated class UntrustedExternalAPIDataNode = UntrustedExternalApiDataNode;
 
 /** An external API which is used with untrusted data. */
 private newtype TExternalApi =
@@ -229,6 +247,3 @@ class ExternalApiUsedWithUntrustedData extends TExternalApi {
     )
   }
 }
-
-/** DEPRECATED: Alias for ExternalApiUsedWithUntrustedData */
-deprecated class ExternalAPIUsedWithUntrustedData = ExternalApiUsedWithUntrustedData;

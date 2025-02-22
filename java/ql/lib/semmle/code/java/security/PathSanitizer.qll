@@ -6,6 +6,7 @@ private import semmle.code.java.dataflow.FlowSources
 private import semmle.code.java.dataflow.SSA
 private import semmle.code.java.frameworks.kotlin.IO
 private import semmle.code.java.frameworks.kotlin.Text
+private import semmle.code.java.dataflow.Nullness
 
 /** A sanitizer that protects against path injection vulnerabilities. */
 abstract class PathInjectionSanitizer extends DataFlow::Node { }
@@ -16,7 +17,7 @@ abstract class PathInjectionSanitizer extends DataFlow::Node { }
 private module ValidationMethod<DataFlow::guardChecksSig/3 validationGuard> {
   /** Gets a node that is safely guarded by a method that uses the given guard check. */
   DataFlow::Node getAValidatedNode() {
-    exists(MethodAccess ma, int pos, RValue rv |
+    exists(MethodCall ma, int pos, VarRead rv |
       validationMethod(ma.getMethod(), pos) and
       ma.getArgument(pos) = rv and
       adjacentUseUseSameVar(rv, result.asExpr()) and
@@ -29,15 +30,19 @@ private module ValidationMethod<DataFlow::guardChecksSig/3 validationGuard> {
    */
   private predicate validationMethod(Method m, int arg) {
     exists(
-      Guard g, SsaImplicitInit var, ControlFlowNode exit, ControlFlowNode normexit, boolean branch
+      Guard g, SsaImplicitInit var, ControlFlow::ExitNode exit, ControlFlowNode normexit,
+      boolean branch
     |
       validationGuard(g, var.getAUse(), branch) and
       var.isParameterDefinition(m.getParameter(arg)) and
-      exit = m and
+      exit.getEnclosingCallable() = m and
       normexit.getANormalSuccessor() = exit and
       1 = strictcount(ControlFlowNode n | n.getANormalSuccessor() = exit)
     |
-      g.(ConditionNode).getABranchSuccessor(branch) = exit or
+      exists(ConditionNode conditionNode |
+        g = conditionNode.getCondition() and conditionNode.getABranchSuccessor(branch) = exit
+      )
+      or
       g.controls(normexit.getBasicBlock(), branch)
     )
   }
@@ -47,7 +52,7 @@ private module ValidationMethod<DataFlow::guardChecksSig/3 validationGuard> {
  * Holds if `g` is guard that compares a path to a trusted value.
  */
 private predicate exactPathMatchGuard(Guard g, Expr e, boolean branch) {
-  exists(MethodAccess ma, RefType t |
+  exists(MethodCall ma, RefType t |
     t instanceof TypeString or
     t instanceof TypeUri or
     t instanceof TypePath or
@@ -56,7 +61,7 @@ private predicate exactPathMatchGuard(Guard g, Expr e, boolean branch) {
     t instanceof StringsKt or
     t instanceof FilesKt
   |
-    e = getVisualQualifier(ma).getUnderlyingExpr() and
+    e = [getVisualQualifier(ma).getUnderlyingExpr(), getVisualArgument(ma, 0)] and
     ma.getMethod().getDeclaringType() = t and
     ma = g and
     getSourceMethod(ma.getMethod()).hasName(["equals", "equalsIgnoreCase"]) and
@@ -64,7 +69,11 @@ private predicate exactPathMatchGuard(Guard g, Expr e, boolean branch) {
   )
 }
 
-private class ExactPathMatchSanitizer extends PathInjectionSanitizer {
+/**
+ * A sanitizer that protects against path injection vulnerabilities
+ * by checking for a matching path.
+ */
+class ExactPathMatchSanitizer extends PathInjectionSanitizer {
   ExactPathMatchSanitizer() {
     this = DataFlow::BarrierGuard<exactPathMatchGuard/3>::getABarrierNode()
     or
@@ -84,7 +93,7 @@ private predicate localTaintFlowToPathGuard(Expr e, PathGuard g) {
   TaintTracking::LocalTaintFlow<anyNode/1, pathGuardNode/1>::hasExprFlow(e, g.getCheckedExpr())
 }
 
-private class AllowedPrefixGuard extends PathGuard instanceof MethodAccess {
+private class AllowedPrefixGuard extends PathGuard instanceof MethodCall {
   AllowedPrefixGuard() {
     (isStringPrefixMatch(this) or isPathPrefixMatch(this)) and
     not isDisallowedWord(super.getAnArgument())
@@ -129,14 +138,7 @@ private class AllowedPrefixSanitizer extends PathInjectionSanitizer {
  * been checked for a trusted prefix.
  */
 private predicate dotDotCheckGuard(Guard g, Expr e, boolean branch) {
-  // Local taint-flow is used here to handle cases where the validated expression comes from the
-  // expression reaching the sink, but it's not the same one, e.g.:
-  //  Path path = source();
-  //  String strPath = path.toString();
-  //  if (!strPath.contains("..") && strPath.startsWith("/safe/dir"))
-  //    sink(path);
-  branch = g.(PathTraversalGuard).getBranch() and
-  localTaintFlowToPathGuard(e, g) and
+  pathTraversalGuard(g, e, branch) and
   exists(Guard previousGuard |
     previousGuard.(AllowedPrefixGuard).controls(g.getBasicBlock(), true)
     or
@@ -151,7 +153,7 @@ private class DotDotCheckSanitizer extends PathInjectionSanitizer {
   }
 }
 
-private class BlockListGuard extends PathGuard instanceof MethodAccess {
+private class BlockListGuard extends PathGuard instanceof MethodCall {
   BlockListGuard() {
     (isStringPartialMatch(this) or isPathPrefixMatch(this)) and
     isDisallowedWord(super.getAnArgument())
@@ -203,7 +205,7 @@ private class ConstantOrRegex extends Expr {
   }
 }
 
-private predicate isStringPrefixMatch(MethodAccess ma) {
+private predicate isStringPrefixMatch(MethodCall ma) {
   exists(Method m, RefType t |
     m.getDeclaringType() = t and
     (t instanceof TypeString or t instanceof StringsKt) and
@@ -222,7 +224,7 @@ private predicate isStringPrefixMatch(MethodAccess ma) {
 /**
  * Holds if `ma` is a call to a method that checks a partial string match.
  */
-private predicate isStringPartialMatch(MethodAccess ma) {
+private predicate isStringPartialMatch(MethodCall ma) {
   isStringPrefixMatch(ma)
   or
   exists(RefType t | t = ma.getMethod().getDeclaringType() |
@@ -235,7 +237,7 @@ private predicate isStringPartialMatch(MethodAccess ma) {
 /**
  * Holds if `ma` is a call to a method that checks whether a path starts with a prefix.
  */
-private predicate isPathPrefixMatch(MethodAccess ma) {
+private predicate isPathPrefixMatch(MethodCall ma) {
   exists(RefType t | t = ma.getMethod().getDeclaringType() |
     t instanceof TypePath or t instanceof FilesKt
   ) and
@@ -251,7 +253,7 @@ private class PathTraversalGuard extends PathGuard {
   Expr checkedExpr;
 
   PathTraversalGuard() {
-    exists(MethodAccess ma, Method m, RefType t |
+    exists(MethodCall ma, Method m, RefType t |
       m = ma.getMethod() and
       t = m.getDeclaringType() and
       (t instanceof TypeString or t instanceof StringsKt) and
@@ -273,14 +275,14 @@ private class PathTraversalGuard extends PathGuard {
   override Expr getCheckedExpr() { result = checkedExpr }
 
   boolean getBranch() {
-    this instanceof MethodAccess and result = false
+    this instanceof MethodCall and result = false
     or
     result = this.(EqualityTest).polarity()
   }
 }
 
 /** A complementary sanitizer that protects against path traversal using path normalization. */
-private class PathNormalizeSanitizer extends MethodAccess {
+private class PathNormalizeSanitizer extends MethodCall {
   PathNormalizeSanitizer() {
     exists(RefType t | this.getMethod().getDeclaringType() = t |
       (t instanceof TypePath or t instanceof FilesKt) and
@@ -297,7 +299,7 @@ private class PathNormalizeSanitizer extends MethodAccess {
  * This is a helper predicate to solve discrepancies between
  * what `getQualifier` actually gets in Java and Kotlin.
  */
-private Expr getVisualQualifier(MethodAccess ma) {
+private Expr getVisualQualifier(MethodCall ma) {
   if ma.getMethod() instanceof ExtensionMethod
   then
     result = ma.getArgument(ma.getMethod().(ExtensionMethod).getExtensionReceiverParameterIndex())
@@ -310,7 +312,7 @@ private Expr getVisualQualifier(MethodAccess ma) {
  * what `getArgument` actually gets in Java and Kotlin.
  */
 bindingset[argPos]
-private Argument getVisualArgument(MethodAccess ma, int argPos) {
+private Argument getVisualArgument(MethodCall ma, int argPos) {
   if ma.getMethod() instanceof ExtensionMethod
   then
     result =
@@ -328,4 +330,56 @@ private Method getSourceMethod(Method m) {
   or
   not exists(Method src | m = src.getKotlinParameterDefaultsProxy()) and
   result = m
+}
+
+/**
+ * A sanitizer that protects against path injection vulnerabilities
+ * by extracting the final component of the user provided path.
+ *
+ * TODO: convert this class to models-as-data if sanitizer support is added
+ */
+private class FileGetNameSanitizer extends PathInjectionSanitizer {
+  FileGetNameSanitizer() {
+    exists(MethodCall mc |
+      mc.getMethod().hasQualifiedName("java.io", "File", "getName") and
+      this.asExpr() = mc
+    )
+  }
+}
+
+/** Holds if `g` is a guard that checks for `..` components. */
+private predicate pathTraversalGuard(Guard g, Expr e, boolean branch) {
+  // Local taint-flow is used here to handle cases where the validated expression comes from the
+  // expression reaching the sink, but it's not the same one, e.g.:
+  //  Path path = source();
+  //  String strPath = path.toString();
+  //  if (!strPath.contains("..") && strPath.startsWith("/safe/dir"))
+  //    sink(path);
+  branch = g.(PathTraversalGuard).getBranch() and
+  localTaintFlowToPathGuard(e, g)
+}
+
+/**
+ * A taint step from a child argument of a `java.io.File` constructor to the
+ * constructor call.
+ *
+ * This step only applies if the argument is not guarded by a check for `..`
+ * components (`PathTraversalGuard`), or it does not have any internal `..`
+ * components removed from it (`PathNormalizeSanitizer`), or if the parent
+ * argument of the constructor may be null.
+ */
+private class FileConstructorChildArgumentStep extends AdditionalTaintStep {
+  override predicate step(DataFlow::Node n1, DataFlow::Node n2) {
+    exists(ConstructorCall constrCall |
+      constrCall.getConstructedType() instanceof TypeFile and
+      n1.asExpr() = constrCall.getArgument(1) and
+      n2.asExpr() = constrCall
+    |
+      not n1 = DataFlow::BarrierGuard<pathTraversalGuard/3>::getABarrierNode() and
+      not n1 = ValidationMethod<pathTraversalGuard/3>::getAValidatedNode() and
+      not TaintTracking::localExprTaint(any(PathNormalizeSanitizer p), n1.asExpr())
+      or
+      DataFlow::localExprFlow(nullExpr(), constrCall.getArgument(0))
+    )
+  }
 }
